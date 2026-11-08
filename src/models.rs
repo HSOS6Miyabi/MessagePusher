@@ -161,10 +161,10 @@ mod tests {
         assert!(invalid.validate().is_err());
     }
     #[test]
-    fn reject_insecure_relay() {
+    fn reject_unsupported_relay_scheme() {
         let p = ProviderInput{name:"Test".into(),kind:"telegram".into(),
             settings:serde_json::json!({"bot_token":"abc"}),
-            delivery:DeliveryMode::Proxy{url:"http://example.com".into(),secret:"a".repeat(32)},enabled:true};
+            delivery:DeliveryMode::Proxy{url:"ftp://example.com".into(),secret:"a".repeat(32)},enabled:true};
         assert!(p.validate().is_err());
     }
 }
