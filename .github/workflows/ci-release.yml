@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -94,7 +98,7 @@ jobs:
           - runner: windows-latest
             target: x86_64-pc-windows-msvc
             name: windows-x86_64
-          - runner: macos-15-intel
+          - runner: macos-15
             target: x86_64-apple-darwin
             name: macos-x86_64
           - runner: macos-15
@@ -158,12 +162,25 @@ jobs:
           pattern: messagepusher-*
           merge-multiple: true
           path: release-assets
+      - name: Confirm current commit
+        id: latest
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            CURRENT=$(git ls-remote origin refs/heads/main | cut -f1)
+            if [[ "$CURRENT" != "$GITHUB_SHA" ]]; then
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
       - name: Update continuous-release tag
-        if: github.ref == 'refs/heads/main'
+        if: steps.latest.outputs.publish == 'true' && github.ref == 'refs/heads/main'
         run: |
           git tag -f edge "$GITHUB_SHA"
           git push origin refs/tags/edge --force
       - uses: softprops/action-gh-release@v2
+        if: steps.latest.outputs.publish == 'true'
         with:
           tag_name: ${{ github.ref == 'refs/heads/main' && 'edge' || github.ref_name }}
           name: ${{ github.ref == 'refs/heads/main' && 'Continuous build (edge)' || github.ref_name }}
