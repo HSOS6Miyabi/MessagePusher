@@ -167,7 +167,7 @@ try{
   assert.equal(site.site_name,'消息中心');
   await desktop.screenshot({path:path.join(captures,'settings-desktop.png'),fullPage:true});
   assert.equal(await desktop.locator('#providerCatalogList .catalog-row').count(),5);
-  await desktop.locator('#providerCatalogList .catalog-row').first().locator('input[type=checkbox]').uncheck();
+  await desktop.locator('#providerCatalogList .catalog-row').first().locator('label.switch').click();
   await desktop.waitForFunction(()=>document.querySelector('#providerCatalogList .catalog-row input').checked===false);
   assert.equal(catalog[0].enabled,false);
   await desktop.locator('.nav-item[data-view=providers]').click();
@@ -176,7 +176,7 @@ try{
   assert.equal(await desktop.locator('#providerKind option[value=telegram]').count(),0);
   await desktop.locator('[data-close=providerDialog]').first().click();
   await desktop.locator('.nav-item[data-view=site]').click();
-  await desktop.locator('#providerCatalogList .catalog-row').first().locator('input[type=checkbox]').check();
+  await desktop.locator('#providerCatalogList .catalog-row').first().locator('label.switch').click();
   await desktop.waitForFunction(()=>document.querySelector('#providerCatalogList .catalog-row input').checked===true);
   assert.equal(catalog[0].enabled,true);
 
