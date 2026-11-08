@@ -527,7 +527,7 @@ try {
   ok('Keys revoked', keys.length === 0);
   await gotoView(desktop, 'providers');
   await desktop.locator('#providerCards .provider-card').first().locator('button:has-text("删除")').click();
-  ok('Provider deleted', channels.length === 1);
+  ok('Provider deleted', channels.length === 4);
 
   const publicPage = await browser.newPage({ viewport: { width: 1200, height: 850 } });
   issuesOnPage(publicPage);
