@@ -58,5 +58,8 @@ pub async fn set_availability(
         "UPDATE provider_catalog SET enabled=$1,updated_at=now() WHERE kind=$2"
     ).bind(change.enabled).bind(&kind).execute(&state.pool).await?;
     if updated.rows_affected()==0{return Err(ApiError::not_found());}
+    if change.enabled {
+        sqlx::query("NOTIFY messagepusher_delivery").execute(&state.pool).await?;
+    }
     Ok(Json(json!({"kind":kind,"enabled":change.enabled})))
 }

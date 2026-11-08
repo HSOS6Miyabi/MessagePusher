@@ -5,22 +5,85 @@ use futures::future::join_all;
 use lettre::{message::{header::ContentType, Attachment as EmailAttachment, Mailbox, MultiPart, SinglePart}, transport::smtp::authentication::Credentials, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use reqwest::multipart::{Form, Part};
 use serde_json::{json, Value};
-use sqlx::Row;
+use sqlx::{postgres::PgListener, Row};
+use chrono::{DateTime, Utc};
 use std::{collections::HashMap, time::Duration};
 use uuid::Uuid;
 
 #[derive(Clone)]
 struct Job { item: RelayItem, attempts: i32, delivery: DeliveryMode }
 
+const DELIVERY_CHANNEL: &str = "messagepusher_delivery";
+const RECONCILIATION_INTERVAL: Duration = Duration::from_secs(60);
+
+async fn connect_listener(state: &AppState) -> Result<PgListener> {
+    let mut listener = PgListener::connect_with(&state.pool).await?;
+    listener.listen(DELIVERY_CHANNEL).await?;
+    Ok(listener)
+}
+
+async fn next_wakeup(state: &AppState) -> Result<Duration> {
+    let next_due: Option<DateTime<Utc>> = sqlx::query_scalar(
+        "SELECT MIN(CASE
+            WHEN d.status='working' THEN COALESCE(d.lease_until, now())
+            ELSE d.next_attempt_at END)
+         FROM deliveries d
+         JOIN providers p ON p.id=d.provider_id
+         JOIN provider_catalog c ON c.kind=p.kind
+         WHERE p.enabled=true AND c.enabled=true AND d.status IN ('pending','working')"
+    ).fetch_one(&state.pool).await?;
+    let wait = next_due
+        .as_ref()
+        .and_then(|deadline| deadline.signed_duration_since(Utc::now()).to_std().ok())
+        .unwrap_or_else(|| if next_due.is_some() {
+            Duration::from_millis(250)
+        } else {
+            RECONCILIATION_INTERVAL
+        });
+    Ok(wait.max(Duration::from_millis(250)).min(RECONCILIATION_INTERVAL))
+}
+
 pub async fn worker(state: AppState) {
-    loop {
-        match claim_jobs(&state).await {
-            Ok(jobs) if jobs.is_empty() => tokio::time::sleep(Duration::from_millis(750)).await,
-            Ok(jobs) => process_jobs(state.clone(), jobs).await,
+    let mut listener = loop {
+        match connect_listener(&state).await {
+            Ok(listener) => break listener,
             Err(error) => {
-                tracing::error!(%error, "Queue worker error");
+                tracing::warn!(%error, "Unable to subscribe to database notifications");
                 tokio::time::sleep(Duration::from_secs(3)).await;
             }
+        }
+    };
+
+    // LISTEN must be active before the initial queue inspection to avoid missing work.
+    loop {
+        match claim_jobs(&state).await {
+            Ok(jobs) if !jobs.is_empty() => {
+                process_jobs(state.clone(), jobs).await;
+                continue;
+            }
+            Ok(_) => {}
+            Err(error) => {
+                tracing::error!(%error, "Unable to read queued messages");
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                continue;
+            }
+        }
+
+        let wait = match next_wakeup(&state).await {
+            Ok(wait) => wait,
+            Err(error) => {
+                tracing::warn!(%error, "Unable to check the next retry time");
+                Duration::from_secs(3)
+            }
+        };
+        tokio::select! {
+            notice = listener.recv() => {
+                if let Err(error) = notice {
+                    tracing::warn!(%error, "Database notification connection interrupted");
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                }
+            }
+            _ = tokio::time::sleep(wait) => {}
         }
     }
 }
@@ -394,6 +457,21 @@ mod tests {
         assert!(email.contains("multipart/mixed"));
         assert!(email.contains("report.txt"));
         assert!(email.contains("hello") || email.contains("aGVsbG8="));
+    }
+
+    #[tokio::test]
+    async fn postgres_notification_is_delivered_after_commit() {
+        let Ok(url) = std::env::var("DATABASE_URL") else { return; };
+        let pool = sqlx::PgPool::connect(&url).await.unwrap();
+        let mut listener = PgListener::connect_with(&pool).await.unwrap();
+        listener.listen(DELIVERY_CHANNEL).await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query("NOTIFY messagepusher_delivery")
+            .execute(&mut *tx).await.unwrap();
+        assert!(tokio::time::timeout(Duration::from_millis(150), listener.recv()).await.is_err());
+        tx.commit().await.unwrap();
+        tokio::time::timeout(Duration::from_secs(3), listener.recv())
+            .await.unwrap().unwrap();
     }
 
     #[test]

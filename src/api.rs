@@ -113,6 +113,9 @@ pub async fn update_user(State(state):State<AppState>,headers:HeaderMap,Path(id)
     if patch.active==Some(false) {
         sqlx::query("UPDATE api_keys SET revoked_at=now() WHERE user_id=$1").bind(id).execute(&mut *tx).await?;
     }
+    if enabled {
+        sqlx::query("NOTIFY messagepusher_delivery").execute(&mut *tx).await?;
+    }
     tx.commit().await?;
     Ok(Json(json!({"id":id,"updated":true})))
 }
@@ -227,6 +230,9 @@ pub async fn update_provider(State(state):State<AppState>,headers:HeaderMap,Path
         .bind(input.name.trim()).bind(sealed).bind(input.enabled).bind(id).bind(user.id)
         .execute(&state.pool).await?.rows_affected();
     if rows==0{return Err(ApiError::not_found());}
+    if input.enabled {
+        sqlx::query("NOTIFY messagepusher_delivery").execute(&state.pool).await?;
+    }
     Ok(Json(json!({"updated":true})))
 }
 pub async fn delete_provider(State(state):State<AppState>,headers:HeaderMap,Path(id):Path<Uuid>)->ApiResult<Json<Value>>{
@@ -303,6 +309,8 @@ pub async fn enqueue(state:&AppState,user_id:Uuid,req:SendRequest,idempotency:Op
         sqlx::query("INSERT INTO deliveries(id,event_id,provider_id,provider_name) VALUES($1,$2,$3,$4)")
             .bind(Uuid::new_v4()).bind(id).bind(provider_id).bind(provider_name).execute(&mut *tx).await?;
     }
+    // PostgreSQL sends NOTIFY only after the transaction commits.
+    sqlx::query("NOTIFY messagepusher_delivery").execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(id)
 }
