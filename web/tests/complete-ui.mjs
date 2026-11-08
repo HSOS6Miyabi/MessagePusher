@@ -375,6 +375,42 @@ try {
   await desktop.locator('#providerDialog').waitFor({ state: 'hidden' });
   ok('SMTP recipients parsed', channels.find(ch => ch.kind === 'email_smtp')?.settings.to.length === 2);
 
+  await desktop.locator('#addProviderButton').click();
+  await desktop.locator('#providerKind').selectOption('email_resend');
+  await desktop.locator('#providerName').fill('系统邮件 API');
+  await desktop.locator('#field-api_key').fill('re_test_key');
+  await desktop.locator('#field-from').fill('notice@example.com');
+  await desktop.locator('#field-to').fill('owner@example.com');
+  await desktop.locator('#providerDialog button[type="submit"]').click();
+  await desktop.locator('#providerDialog').waitFor({ state: 'hidden' });
+  ok('Resend provider saved', channels.some(ch => ch.kind === 'email_resend'));
+
+  await desktop.locator('#addProviderButton').click();
+  await desktop.locator('#providerKind').selectOption('wecom_webhook');
+  await desktop.locator('#providerName').fill('企业微信群通知');
+  await desktop.locator('#field-webhook_key').fill('wecom-test-key');
+  await desktop.locator('#providerDialog button[type="submit"]').click();
+  await desktop.locator('#providerDialog').waitFor({ state: 'hidden' });
+  ok('WeCom group robot saved', channels.some(ch => ch.kind === 'wecom_webhook'));
+
+  await desktop.locator('#addProviderButton').click();
+  await desktop.locator('#providerKind').selectOption('wecom_app');
+  await desktop.locator('#providerName').fill('企业微信应用通知');
+  await desktop.locator('#field-corp_id').fill('test_enterprise');
+  await desktop.locator('#field-corp_secret').fill('secret-value');
+  await desktop.locator('#field-agent_id').fill('1000002');
+  await desktop.locator('#field-to_user').fill('zhangsan');
+  await desktop.locator('#providerDialog button[type="submit"]').click();
+  await desktop.locator('#providerDialog').waitFor({ state: 'hidden' });
+  ok('WeCom app saved', channels.some(ch => ch.kind === 'wecom_app' && ch.settings.agent_id === 1000002));
+  await screenshot(desktop, '06b-all-provider-types-desktop');
+  const wecomCard = desktop.locator('#providerCards .provider-card').filter({ hasText: '企业微信应用通知' });
+  await wecomCard.locator('button:has-text("授权链接")').click();
+  await desktop.locator('#linkDialog').waitFor({ state: 'visible' });
+  ok('WeCom authorization link shown', (await desktop.locator('#linkValue').inputValue()).startsWith('https://open.weixin.qq.com'));
+  await screenshot(desktop, '06c-wecom-authorization-desktop');
+  await desktop.locator('#linkDialog [data-close]').first().click();
+
   await gotoView(desktop, 'keys');
   await screenshot(desktop, '07-keys-empty-desktop');
   await desktop.locator('#addKeyButton').click();
@@ -384,7 +420,22 @@ try {
   await desktop.locator('#keyDialog').waitFor({ state: 'hidden' });
   ok('Key created', keys.length === 1);
   ok('Key revealed once', await desktop.locator('#keyReveal').isVisible());
+  await desktop.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async text => { window.copiedKey = text; } }
+    });
+  });
+  await desktop.locator('#copyKeyButton').click();
+  ok('Copy key action', await desktop.evaluate(() => window.copiedKey) === keys[0].secret);
   await screenshot(desktop, '09-key-created-desktop');
+
+  await desktop.locator('#addKeyButton').click();
+  await desktop.locator('#keyName').fill('Server酱兼容应用');
+  await desktop.locator('#keyFormat').selectOption('serverchan');
+  await desktop.locator('#keyDialog button[type="submit"]').click();
+  await desktop.locator('#keyDialog').waitFor({ state: 'hidden' });
+  ok('Serverchan key created', keys.some(key => key.secret.startsWith('SCT')));
 
   await gotoView(desktop, 'send');
   await screenshot(desktop, '10-compose-desktop');
@@ -395,6 +446,8 @@ try {
   });
   ok('File selected', (await desktop.locator('#fileSelection').textContent()).includes('service-report.txt'));
   await desktop.locator('[name="sendMode"][value="select"]').check();
+  await desktop.locator('#sendForm button[type="submit"]').click();
+  ok('No target is rejected', messages.length === 0 && (await desktop.locator('#toastArea').textContent()).includes('请至少选择一个推送渠道'));
   await desktop.locator('[name="targetProvider"]').first().check();
   await screenshot(desktop, '11-compose-with-file-desktop');
   await desktop.locator('#sendForm button[type="submit"]').click();
@@ -452,6 +505,9 @@ try {
   await screenshot(desktop, '18-account-desktop');
   await desktop.locator('#currentPassword').fill('admin-password-123');
   await desktop.locator('#newPassword').fill('admin-password-999');
+  await desktop.locator('#confirmPassword').fill('different-password-123');
+  await desktop.locator('#passwordForm button[type="submit"]').click();
+  ok('Password mismatch is rejected', await desktop.locator('#appShell').isVisible() && (await desktop.locator('#toastArea').textContent()).includes('两次输入的新密码不一致'));
   await desktop.locator('#confirmPassword').fill('admin-password-999');
   await desktop.locator('#passwordForm button[type="submit"]').click();
   await desktop.locator('#authScreen').waitFor({ state: 'visible' });
@@ -460,8 +516,15 @@ try {
   ok('Login after password change');
 
   await gotoView(desktop, 'keys');
-  await desktop.locator('#keysList button:has-text("撤销密钥")').click();
-  ok('Key revoked', keys.length === 0);
+  await desktop.evaluate(() => { window.confirm = () => false; });
+  await desktop.locator('#keysList button:has-text("撤销密钥")').first().click();
+  ok('Cancelled key revoke preserves key', keys.length === 2);
+  await desktop.evaluate(() => { window.confirm = () => true; });
+  for (let i = 0; i < 2; i++) {
+    await desktop.locator('#keysList button:has-text("撤销密钥")').first().click();
+    await desktop.waitForFunction(remaining => document.querySelectorAll('#keysList button').length <= remaining, 1 - i);
+  }
+  ok('Keys revoked', keys.length === 0);
   await gotoView(desktop, 'providers');
   await desktop.locator('#providerCards .provider-card').first().locator('button:has-text("删除")').click();
   ok('Provider deleted', channels.length === 1);
@@ -477,6 +540,12 @@ try {
   ok('Registration enabled', await publicPage.locator('#registerTab').isVisible());
   await publicPage.locator('#registerTab').click();
   await screenshot(publicPage, '19-registration-desktop');
+  await publicPage.locator('#registerPassword').fill('register-password-123');
+  await publicPage.locator('#registerConfirm').fill('mismatched-password');
+  await publicPage.locator('#registerForm button[type="submit"]').click();
+  ok('Registration password mismatch is rejected',
+    await publicPage.locator('#authScreen').isVisible() &&
+    (await publicPage.locator('#toastArea').textContent()).includes('两次输入的密码不一致'));
   await publicPage.locator('#registerUsername').fill('invalid username');
   ok('Registration username validation', await publicPage.locator('#registerUsername').evaluate(el => !el.checkValidity()));
   await publicPage.locator('#registerUsername').fill('self_registered');
