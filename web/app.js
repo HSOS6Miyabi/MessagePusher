@@ -83,6 +83,16 @@ function friendlyError(error){
   if(text==='username already exists')return '这个用户名已被占用，请使用其他用户名。';
   return text;
 }
+function deliveryErrorMessage(error){
+  const text=String(error||'');
+  if(/connection refused/i.test(text))return '连接失败：目标服务器拒绝连接';
+  if(/timed out|timeout|deadline exceeded/i.test(text))return '连接超时，请检查网络和服务器状态';
+  if(/name or service not known|failed to lookup|dns error/i.test(text))return '无法解析目标服务器地址';
+  if(/authentication failed/i.test(text))return '推送平台身份验证失败';
+  const http=text.match(/provider returned HTTP (\d{3})/i);
+  if(http)return '推送平台返回 HTTP '+http[1]+' 错误';
+  return text;
+}
 async function request(path,{method='GET',body,auth=true,key}={}) {
   const headers = new Headers({'Accept':'application/json'});
   if (key !== undefined) headers.set('Authorization','Bearer '+key);
@@ -378,7 +388,10 @@ async function showEvent(id){
   container.append(node('h3','','各渠道发送情况'));
   for(const d of event.deliveries){
     const row=node('div','delivery-row');
-    const copy=node('div');copy.append(node('strong','',d.provider),node('small','',(d.error?d.error+' · ':'')+'尝试 '+d.attempts+' 次'));
+    const copy=node('div');
+    const hint=node('small','',(d.error?deliveryErrorMessage(d.error)+' · ':'')+'尝试 '+d.attempts+' 次');
+    if(d.error)hint.title=d.error;
+    copy.append(node('strong','',d.provider),hint);
     const statusMap={sent:['已发送',''],failed:['发送失败','error'],working:['发送中','pending'],pending:['等待重试','pending']};
     row.append(copy,tag(...(statusMap[d.status]||[d.status,'pending'])));
     container.append(row);
