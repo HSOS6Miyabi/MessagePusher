@@ -23,11 +23,12 @@ fn bearer(headers: &HeaderMap) -> ApiResult<&str> {
 }
 
 pub async fn require_user(state: &AppState, headers: &HeaderMap) -> ApiResult<User> {
-    let id = security::verify_session(bearer(headers)?, &state.jwt_secret)
+    let (id, version) = security::verify_session(bearer(headers)?, &state.jwt_secret)
         .map_err(|_| ApiError::unauthorized())?;
-    let row = sqlx::query("SELECT id,username,role,active FROM users WHERE id=$1")
+    let row = sqlx::query("SELECT id,username,role,active,session_version FROM users WHERE id=$1")
         .bind(id).fetch_optional(&state.pool).await?.ok_or_else(ApiError::unauthorized)?;
     if !row.get::<bool,_>("active") { return Err(ApiError::forbidden()); }
+    if row.get::<i64,_>("session_version") != version { return Err(ApiError::unauthorized()); }
     Ok(User {id:row.get("id"),username:row.get("username"),role:row.get("role"),active:true})
 }
 fn admin_only(user: &User) -> ApiResult<()> {
@@ -45,14 +46,14 @@ pub async fn user_from_key(state: &AppState, key: &str) -> ApiResult<Uuid> {
 #[derive(Deserialize)]
 pub struct LoginBody { username: String, password: String }
 pub async fn login(State(state): State<AppState>, Json(body): Json<LoginBody>) -> ApiResult<Json<Value>> {
-    let row = sqlx::query("SELECT id,password_hash,active FROM users WHERE username=$1")
+    let row = sqlx::query("SELECT id,password_hash,active,session_version FROM users WHERE username=$1")
         .bind(body.username.to_lowercase()).fetch_optional(&state.pool).await?;
     let Some(row) = row else { return Err(ApiError::unauthorized()); };
     if !row.get::<bool,_>("active") || !security::password_valid(row.get("password_hash"), &body.password) {
         return Err(ApiError::unauthorized());
     }
     let user_id: Uuid = row.get("id");
-    let token = security::session_token(user_id, &state.jwt_secret).map_err(ApiError::internal)?;
+    let token = security::session_token(user_id, row.get::<i64,_>("session_version"), &state.jwt_secret).map_err(ApiError::internal)?;
     Ok(Json(json!({"token":token,"expires_in_seconds":86400})))
 }
 pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Json<User>> {
@@ -68,15 +69,19 @@ pub async fn list_users(State(state): State<AppState>, headers: HeaderMap) -> Ap
         "created_at":r.get::<DateTime<Utc>,_>("created_at")
     })).collect()))
 }
+pub fn valid_username(value: &str) -> ApiResult<String> {
+    let username = value.trim().to_lowercase();
+    if username.len()<3 || username.len()>60 || !username.chars().all(|c| c.is_ascii_alphanumeric() || c=='_' || c=='-') {
+        return Err(ApiError::bad("username must be 3 to 60 letters, digits, underscores or hyphens"));
+    }
+    Ok(username)
+}
 #[derive(Deserialize)]
 pub struct NewUser { username:String, password:String, #[serde(default="default_user")] role:String }
 fn default_user() -> String {"user".into()}
 pub async fn create_user(State(state):State<AppState>,headers:HeaderMap,Json(req):Json<NewUser>) -> ApiResult<(StatusCode,Json<Value>)> {
     admin_only(&require_user(&state,&headers).await?)?;
-    let username = req.username.trim().to_lowercase();
-    if username.len()<3 || username.len()>60 || !username.chars().all(|c| c.is_ascii_alphanumeric() || c=='_' || c=='-') {
-        return Err(ApiError::bad("username must be 3 to 60 letters, digits, underscores or hyphens"));
-    }
+    let username = valid_username(&req.username)?;
     if !["admin","user"].contains(&req.role.as_str()) {return Err(ApiError::bad("role must be admin or user"));}
     let hash=security::password_hash(&req.password).map_err(|e|ApiError::bad(e.to_string()))?;
     let id=Uuid::new_v4();
@@ -99,7 +104,7 @@ pub async fn update_user(State(state):State<AppState>,headers:HeaderMap,Path(id)
     }
     let hash=patch.password.as_deref().map(security::password_hash).transpose()
         .map_err(|e|ApiError::bad(e.to_string()))?;
-    let changed=sqlx::query("UPDATE users SET role=COALESCE($1,role),active=COALESCE($2,active),password_hash=COALESCE($3,password_hash) WHERE id=$4")
+    let changed=sqlx::query("UPDATE users SET role=COALESCE($1,role),active=COALESCE($2,active),password_hash=COALESCE($3,password_hash),session_version=session_version+1 WHERE id=$4")
         .bind(patch.role).bind(patch.active).bind(hash).bind(id).execute(&state.pool).await?;
     if changed.rows_affected()==0{return Err(ApiError::not_found());}
     if patch.active==Some(false) {
@@ -310,4 +315,129 @@ pub async fn event_detail(State(state):State<AppState>,headers:HeaderMap,Path(id
             "sent_at":r.get::<Option<DateTime<Utc>>,_>("sent_at")
         })).collect::<Vec<_>>()
     })))
+}
+
+
+#[derive(Deserialize)]
+pub struct ProviderPatch {
+    pub name: Option<String>,
+    pub enabled: Option<bool>,
+    pub settings: Option<Value>,
+    pub delivery: Option<Value>,
+}
+fn visible_provider_settings(kind: &str, data: &Value) -> Value {
+    let allowed: &[&str] = match kind {
+        "telegram" => &["bot_username", "chat_id"],
+        "wecom_app" => &["corp_id", "agent_id", "to_user"],
+        "wecom_webhook" => &[],
+        "email_smtp" => &["host", "port", "tls", "username", "from", "to"],
+        "email_resend" => &["from", "to"],
+        _ => &[],
+    };
+    let mut result = serde_json::Map::new();
+    for key in allowed {
+        if let Some(value) = data.get(*key) {
+            result.insert((*key).into(), value.clone());
+        }
+    }
+    Value::Object(result)
+}
+pub async fn provider_detail(
+    State(state):State<AppState>, headers:HeaderMap, Path(id):Path<Uuid>
+) -> ApiResult<Json<Value>> {
+    let user = require_user(&state, &headers).await?;
+    let row = sqlx::query(
+        "SELECT name,kind,enabled,encrypted_settings FROM providers WHERE id=$1 AND user_id=$2"
+    ).bind(id).bind(user.id).fetch_optional(&state.pool).await?.ok_or_else(ApiError::not_found)?;
+    let kind: String = row.get("kind");
+    let saved = decrypt_provider(&state, row.get("encrypted_settings"))?;
+    let stored_secrets: Vec<&str> = [
+        "bot_token", "webhook_secret", "corp_secret",
+        "webhook_key", "password", "api_key",
+    ].iter().copied().filter(|key| saved.settings.get(*key).and_then(Value::as_str).is_some_and(|s|!s.is_empty())).collect();
+    let route = match &saved.delivery {
+        DeliveryMode::Direct => json!({"mode":"direct"}),
+        DeliveryMode::Proxy{url,..} => json!({"mode":"proxy","url":url,"secret_saved":true}),
+    };
+    Ok(Json(json!({
+        "id":id, "name":row.get::<String,_>("name"),
+        "kind":kind, "enabled":row.get::<bool,_>("enabled"),
+        "settings":visible_provider_settings(&kind,&saved.settings),
+        "stored_secrets":stored_secrets,
+        "delivery":route
+    })))
+}
+pub async fn patch_provider(
+    State(state):State<AppState>, headers:HeaderMap,Path(id):Path<Uuid>,Json(patch):Json<ProviderPatch>
+) -> ApiResult<Json<Value>> {
+    let user = require_user(&state,&headers).await?;
+    if patch.name.is_none() && patch.enabled.is_none() && patch.settings.is_none() && patch.delivery.is_none() {
+        return Err(ApiError::bad("no provider changes were provided"));
+    }
+    let mut tx = state.pool.begin().await?;
+    let row = sqlx::query(
+        "SELECT name,kind,enabled,encrypted_settings FROM providers WHERE id=$1 AND user_id=$2 FOR UPDATE"
+    ).bind(id).bind(user.id).fetch_optional(&mut *tx).await?.ok_or_else(ApiError::not_found)?;
+    let mut saved = decrypt_provider(&state,row.get("encrypted_settings"))?;
+    if let Some(fields) = patch.settings {
+        let Value::Object(fields) = fields else { return Err(ApiError::bad("settings must be a JSON object")); };
+        let Value::Object(ref mut current) = saved.settings else {return Err(ApiError::bad("invalid stored provider settings"));};
+        for (key,value) in fields {
+            if value.is_null() {current.remove(&key);} else {current.insert(key,value);}
+        }
+    }
+    if let Some(route) = patch.delivery {
+        let mode = route.get("mode").and_then(Value::as_str).ok_or_else(||ApiError::bad("delivery.mode is required"))?;
+        saved.delivery = match mode {
+            "direct" => DeliveryMode::Direct,
+            "proxy" => {
+                let prior = match &saved.delivery {
+                    DeliveryMode::Proxy{url,secret} => Some((url.clone(),secret.clone())),
+                    DeliveryMode::Direct => None,
+                };
+                let url = route.get("url").and_then(Value::as_str)
+                    .filter(|s|!s.trim().is_empty()).map(str::to_owned)
+                    .or_else(||prior.as_ref().map(|x|x.0.clone()))
+                    .ok_or_else(||ApiError::bad("relay URL is required"))?;
+                let secret = route.get("secret").and_then(Value::as_str)
+                    .filter(|s|!s.is_empty()).map(str::to_owned)
+                    .or_else(||prior.map(|x|x.1))
+                    .ok_or_else(||ApiError::bad("relay secret is required"))?;
+                DeliveryMode::Proxy{url,secret}
+            },
+            _ => return Err(ApiError::bad("unknown delivery mode")),
+        };
+    }
+    let name = patch.name.unwrap_or_else(||row.get("name"));
+    let enabled = patch.enabled.unwrap_or_else(||row.get("enabled"));
+    let input = ProviderInput {
+        name: name.clone(),kind:row.get("kind"),settings:saved.settings,
+        delivery:saved.delivery,enabled
+    };
+    let sealed = encrypt_provider(&state,&input)?;
+    sqlx::query("UPDATE providers SET name=$1,encrypted_settings=$2,enabled=$3 WHERE id=$4 AND user_id=$5")
+        .bind(input.name.trim()).bind(sealed).bind(enabled).bind(id).bind(user.id)
+        .execute(&mut *tx).await
+        .map_err(|err|if err.as_database_error().is_some_and(|db|db.is_unique_violation()){
+            ApiError::bad("provider name already exists")
+        }else{ApiError::internal(err)})?;
+    tx.commit().await?;
+    Ok(Json(json!({"id":id,"updated":true})))
+}
+
+#[cfg(test)]
+mod provider_tests {
+    use super::*;
+    #[test]
+    fn safe_provider_view_never_exposes_credentials() {
+        let source=json!({
+            "bot_token":"private", "bot_username":"ExampleBot",
+            "webhook_secret":"also-private", "chat_id":"12345"
+        });
+        let visible=visible_provider_settings("telegram",&source);
+        assert_eq!(visible["bot_username"],"ExampleBot");
+        assert_eq!(visible["chat_id"],"12345");
+        assert!(visible.get("bot_token").is_none());
+        assert!(visible.get("webhook_secret").is_none());
+    }
 }

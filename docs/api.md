@@ -16,14 +16,21 @@ curl -X POST https://push.example.com/v1/login \
 
 | 方法和路径 | 权限 | 用途 |
 | --- | --- | --- |
+| `GET /v1/site` | 所有人 | 查看站点名称、简介、公告和是否开放注册 |
+| `POST /v1/register` | 所有人，需开启注册 | 注册普通用户，字段为 `username`、`password` |
+| `PATCH /v1/admin/site` | 管理员 | 设置站点名称、简介、公告及注册开关 |
+| `GET /v1/admin/overview` | 管理员 | 查看站点的用户、渠道和消息总量 |
 | `GET /v1/me` | 登录用户 | 查看自己的账户 |
+| `POST /v1/me/password` | 登录用户 | 通过原密码修改自己的登录密码 |
 | `GET /v1/users` | 管理员 | 列出所有用户 |
 | `POST /v1/users` | 管理员 | 创建用户，字段为 `username`、`password`、`role` |
 | `PATCH /v1/users/{id}` | 管理员 | 修改 `role`、`active` 或 `password` |
 | `DELETE /v1/users/{id}` | 管理员 | 删除用户及其数据 |
 | `GET /v1/providers` | 登录用户 | 查看自己的平台及授权状态 |
 | `POST /v1/providers` | 登录用户 | 添加平台 |
+| `GET /v1/providers/{id}` | 登录用户 | 查看自己的平台，敏感配置只返回是否已经保存 |
 | `PUT /v1/providers/{id}` | 登录用户 | 完整更新平台 |
+| `PATCH /v1/providers/{id}` | 登录用户 | 修改平台名称、启用状态或部分配置，未提交的密码保持不变 |
 | `DELETE /v1/providers/{id}` | 登录用户 | 删除平台 |
 | `GET /v1/keys` | 登录用户 | 列出密钥名称和前缀 |
 | `POST /v1/keys` | 登录用户 | 创建发送密钥 |
@@ -32,6 +39,38 @@ curl -X POST https://push.example.com/v1/login \
 | `GET /v1/events/{id}` | 登录用户 | 查看各平台的发送状态 |
 
 `POST /v1/keys` 请求体为 `{"name":"服务器监控","format":"standard"}` 或 `{"name":"旧系统通知","format":"serverchan"}`。响应会提供完整密钥一次，之后只能查看开头部分。
+
+### 公开注册与站点设置
+
+公开注册默认关闭。管理员登录后可调用：
+
+```bash
+curl -X PATCH https://push.example.com/v1/admin/site \
+  -H 'Authorization: Bearer 管理令牌' \
+  -H 'Content-Type: application/json' \
+  -d '{"site_name":"我的通知中心","site_description":"服务器和网站消息","announcement":"","allow_registration":true}'
+```
+
+启用注册后，访问者可以通过管理页面注册，或者使用：
+
+```bash
+curl -X POST https://push.example.com/v1/register \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"newuser","password":"A_STRONG_PASSWORD_123"}'
+```
+
+注册成功返回 HTTP 201，包含用户 ID、普通用户权限和登录令牌。用户名只能使用 3–60 个英文字母、数字、下划线或连字符，密码长度为 12–256 个字符。关闭注册后，新注册请求会被拒绝。开放注册时，每小时最多创建 60 个普通用户。
+
+用户修改密码：
+
+```bash
+curl -X POST https://push.example.com/v1/me/password \
+  -H 'Authorization: Bearer 管理令牌' \
+  -H 'Content-Type: application/json' \
+  -d '{"current_password":"CURRENT_PASSWORD","new_password":"NEW_STRONG_PASSWORD_123"}'
+```
+
+修改成功后需要重新登录。管理员也可以通过 `PATCH /v1/users/{id}` 修改其他用户的密码、角色或启用状态。更改账户信息后，用户需要重新登录。
 
 ### 添加平台的格式
 
@@ -58,7 +97,7 @@ curl -X POST https://push.example.com/v1/login \
 }
 ```
 
-平台详细参数见 [各平台配置](providers.md)。更新平台时应提交完整的新参数；列表接口不会返回已保存的密码或 Token。
+平台详细参数见 [各平台配置](providers.md)。使用 PUT 更新平台时应提交完整的新参数。使用 PATCH 时，只需提交需要更改的字段，例如 `{"enabled":false}` 或 `{"settings":{"to":["new@example.com"]}}`。已保存的密码和 Token 不会通过查询接口返回，未提交的敏感字段会保留。
 
 ## 发送消息
 

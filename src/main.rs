@@ -4,6 +4,7 @@ mod delivery;
 mod error;
 mod models;
 mod security;
+mod site;
 mod subscribe;
 
 use anyhow::{Context, Result};
@@ -50,15 +51,22 @@ async fn main() -> Result<()> {
 fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(|| async { Html(include_str!("../web/index.html")) }))
+        .route("/assets/styles.css", get(|| async { ([("content-type", "text/css; charset=utf-8"), ("cache-control","public, max-age=300")], include_str!("../web/styles.css")) }))
+        .route("/assets/app.js", get(|| async { ([("content-type", "text/javascript; charset=utf-8"), ("cache-control","public, max-age=300")], include_str!("../web/app.js")) }))
         .route("/healthz", get(|| async { axum::Json(serde_json::json!({"ok":true})) }))
         .route("/v1/login", post(api::login))
+        .route("/v1/register", post(site::register))
+        .route("/v1/site", get(site::public_settings))
+        .route("/v1/admin/site", get(site::public_settings).patch(site::update_settings))
+        .route("/v1/admin/overview", get(site::overview))
+        .route("/v1/me/password", post(site::change_password))
         .route("/v1/me", get(api::me))
         .route("/v1/users", get(api::list_users).post(api::create_user))
         .route("/v1/users/{id}", patch(api::update_user).delete(api::delete_user))
         .route("/v1/keys", get(api::list_keys).post(api::create_key))
         .route("/v1/keys/{id}", delete(api::delete_key))
         .route("/v1/providers", get(api::list_providers).post(api::create_provider))
-        .route("/v1/providers/{id}", put(api::update_provider).delete(api::delete_provider))
+        .route("/v1/providers/{id}", get(api::provider_detail).put(api::update_provider).patch(api::patch_provider).delete(api::delete_provider))
         .route("/v1/send", post(api::send_json))
         .route("/v1/send/multipart", post(api::send_multipart))
         .route("/v1/events", get(api::list_events))

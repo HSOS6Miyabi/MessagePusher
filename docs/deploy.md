@@ -5,7 +5,7 @@
 1. 下载仓库，复制 `.env.example` 为 `.env`。
 2. 在 `.env` 中填写 `POSTGRES_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`JWT_SECRET`、`CONFIG_KEY_BASE64`。
 3. 执行 `docker compose up -d --build`。
-4. 浏览器打开 `http://你的服务器:8080`，用管理员账户登录。
+4. 浏览器打开 `http://你的服务器:8080`，用管理员账户登录。在“站点设置”中填写站点名称和公告，并决定是否开放用户自行注册。公开注册默认关闭。
 5. 在正式对外使用前，配置反向代理和 HTTPS，然后把 `PUBLIC_BASE_URL` 改为公开的 HTTPS 地址，执行 `docker compose up -d` 使设置生效。
 
 更新程序时，在保存好数据库备份后，拉取仓库新版本，执行 `docker compose up -d --build`。程序启动时会自动执行新增的数据库迁移文件。

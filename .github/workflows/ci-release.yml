@@ -50,6 +50,8 @@ jobs:
       - name: Test FaaS relay
         run: npm test
         working-directory: relay
+      - name: Validate browser application JavaScript
+        run: node --check web/app.js
       - name: Verify API and database migration
         shell: bash
         run: |
@@ -82,6 +84,56 @@ jobs:
           python3 -c 'import json;assert json.load(open("/tmp/sent.json"))["status"] == "queued"'
           curl -fsS "http://127.0.0.1:8080/v1/events" -H "Authorization: Bearer $SESSION" \
             | python3 -c 'import json,sys; assert len(json.load(sys.stdin)) == 2'
+          curl -fsS http://127.0.0.1:8080/assets/styles.css | grep -q 'stats-grid'
+          curl -fsS http://127.0.0.1:8080/assets/app.js | grep -q 'refreshAll'
+          curl -fsS http://127.0.0.1:8080/v1/site > /tmp/site.json
+          python3 -c 'import json; assert json.load(open("/tmp/site.json"))["allow_registration"] is False'
+          STATUS=$(curl -sS -o /tmp/register-closed.json -w '%{http_code}' \
+            -X POST http://127.0.0.1:8080/v1/register -H 'Content-Type: application/json' \
+            -d '{"username":"newmember","password":"new-member-password123"}')
+          test "$STATUS" = 403
+          curl -fsS -X PATCH http://127.0.0.1:8080/v1/admin/site \
+            -H "Authorization: Bearer $SESSION" -H 'Content-Type: application/json' \
+            -d '{"site_name":"CI Notification Hub","site_description":"Test service","announcement":"Welcome","allow_registration":true}' > /tmp/site-updated.json
+          python3 -c 'import json; d=json.load(open("/tmp/site-updated.json")); assert d["site_name"]=="CI Notification Hub" and d["allow_registration"] is True'
+          curl -fsS -X POST http://127.0.0.1:8080/v1/register \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"newmember","password":"new-member-password123","role":"admin"}' > /tmp/register.json
+          NEWTOKEN=$(python3 -c 'import json; d=json.load(open("/tmp/register.json")); assert d["role"]=="user"; print(d["token"])')
+          curl -fsS http://127.0.0.1:8080/v1/me -H "Authorization: Bearer $NEWTOKEN" \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["role"]=="user"'
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -X PATCH http://127.0.0.1:8080/v1/admin/site \
+            -H "Authorization: Bearer $NEWTOKEN" -H 'Content-Type: application/json' \
+            -d '{"allow_registration":false}')
+          test "$STATUS" = 403
+          curl -fsS -X POST http://127.0.0.1:8080/v1/me/password \
+            -H "Authorization: Bearer $NEWTOKEN" -H 'Content-Type: application/json' \
+            -d '{"current_password":"new-member-password123","new_password":"newer-member-password123"}' > /tmp/password-changed.json
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/me \
+            -H "Authorization: Bearer $NEWTOKEN")
+          test "$STATUS" = 401
+          curl -fsS -X POST http://127.0.0.1:8080/v1/login \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"newmember","password":"newer-member-password123"}' > /tmp/login-new.json
+          curl -fsS -X PATCH http://127.0.0.1:8080/v1/admin/site \
+            -H "Authorization: Bearer $SESSION" -H 'Content-Type: application/json' \
+            -d '{"allow_registration":false}' >/tmp/closed-again.json
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/v1/register \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"anotheruser","password":"another-strong-password123"}')
+          test "$STATUS" = 403
+          curl -fsS http://127.0.0.1:8080/v1/admin/overview -H "Authorization: Bearer $SESSION" \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["active_users"]==2'
+          PROVIDER=$(python3 -c 'import json;print(json.load(open("/tmp/provider.json"))["id"])')
+          curl -fsS "http://127.0.0.1:8080/v1/providers/$PROVIDER" \
+            -H "Authorization: Bearer $SESSION" > /tmp/provider-view.json
+          python3 -c 'import json; d=json.load(open("/tmp/provider-view.json")); assert d["kind"]=="email_smtp" and d["settings"]["host"]=="127.0.0.1"'
+          curl -fsS -X PATCH "http://127.0.0.1:8080/v1/providers/$PROVIDER" \
+            -H "Authorization: Bearer $SESSION" -H 'Content-Type: application/json' \
+            -d '{"name":"CI SMTP renamed","enabled":false}' >/tmp/provider-patched.json
+          curl -fsS "http://127.0.0.1:8080/v1/providers/$PROVIDER" \
+            -H "Authorization: Bearer $SESSION" \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin);assert d["enabled"]==False and d["name"]=="CI SMTP renamed"'
 
   build:
     needs: test

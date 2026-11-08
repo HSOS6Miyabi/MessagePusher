@@ -1,283 +1,256 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light">
-<title>MessagePusher 消息推送管理</title>
-<style>
-:root{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#172235;background:#f5f7fa}
-*{box-sizing:border-box}body{margin:0;min-height:100vh}header{background:#152b47;color:white;padding:20px max(24px,calc((100vw - 1120px)/2))}
-header h1{font-size:24px;margin:0 0 5px}header p{font-size:13px;color:#cbd8e8;margin:0}
-main{max-width:1120px;margin:26px auto;padding:0 20px 40px}
-section{background:white;border:1px solid #e2e7ec;border-radius:12px;padding:22px;margin:0 0 20px;box-shadow:0 2px 10px #12253b0a}
-h2{font-size:18px;margin:0 0 16px}h3{font-size:15px;margin:18px 0 8px}
-label{display:block;font-size:13px;color:#425269;margin:12px 0 5px;font-weight:600}
-input,textarea,select{font:inherit;padding:9px 11px;border:1px solid #bcc9d7;border-radius:7px;width:100%;background:#fff;color:#172235}
-textarea{min-height:100px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;resize:vertical}
-button{padding:9px 15px;border:0;border-radius:7px;background:#235c9a;color:white;font-weight:600;cursor:pointer}
-button:hover{background:#174a7d}button.secondary{background:#e9eef4;color:#203b5c}
-button.danger{background:#a53636}button:disabled{opacity:.5;cursor:not-allowed}
-.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.columns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-small,.hint{color:#64758b;font-size:13px;line-height:1.6}
-ul{margin:8px 0 0;padding:0;list-style:none}li{border-top:1px solid #e9edf2;padding:12px 0;display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
-li:first-child{border-top:0}.name{font-weight:650}.meta{font-size:12px;color:#667789;margin-top:4px}
-#notice{display:none;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #e0d5b7;background:#fffaf0;padding:12px;border-radius:8px;margin-bottom:18px}
-pre{white-space:pre-wrap;word-break:break-word;background:#f3f6f9;padding:12px;border-radius:7px;font-size:12px;max-height:300px;overflow:auto}
-code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
-#mainPanel,#adminSection{display:none}#loginSection{max-width:480px;margin:15vh auto}
-#reveal{display:none;padding:12px;margin:12px 0;background:#f0f6ff;border:1px solid #c6d8f2;border-radius:8px}
-#reveal input{font-family:monospace}.top{display:flex;justify-content:space-between;align-items:center;gap:20px}
-@media(max-width:760px){.columns,.row{grid-template-columns:1fr}li{align-items:flex-start}.top{align-items:flex-start;flex-direction:column}header{padding:18px}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#14243f">
+  <meta name="description" content="MessagePusher · 多平台消息推送管理">
+  <title>MessagePusher · 推送管理</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/app.js" defer></script>
 </head>
 <body>
-<header><h1>MessagePusher</h1><p>统一管理邮件、Telegram、企业微信及消息代理</p></header>
-<main>
-<div id="notice" role="alert"></div>
-<section id="loginSection">
-<h2>登录管理平台</h2>
-<form id="loginForm">
-<label for="username">用户名</label><input id="username" autocomplete="username" required>
-<label for="password">密码</label><input id="password" type="password" autocomplete="current-password" required>
-<p><button type="submit">登录</button></p>
-</form>
-<p class="hint">首次使用时，管理员账号由服务器的 ADMIN_USERNAME 和 ADMIN_PASSWORD 环境变量创建。</p>
+<svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="m21 3-7.5 18-3.8-7.7L2 9.5 21 3Z"/><path d="M21 3 9.7 13.3"/></symbol>
+  <symbol id="i-channel" viewBox="0 0 24 24"><path d="M4 16a4 4 0 0 1 0-8m16 8a4 4 0 0 0 0-8M7 19a9 9 0 0 0 0-14m10 14a9 9 0 0 0 0-14"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9 2 2-2 2 1 2-3 3-2-2-2 2"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v1"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14-5L3 9m0-5v5h5M4 13a8 8 0 0 0 14 5l3-3m0 5v-5h-5"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4m6-4 4-4-4-4m4 4H9"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M13 6 18 11M4 20l4.5-1 11-11a2.2 2.2 0 0 0-3.1-3.1l-11 11L4 20Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 3h4m-8 4 1 14h10l1-14M10 11v6m4-6v6"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 10a6 6 0 0 1 12 0v5l2 3H4l2-3v-5M10 21h4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6m0-6-10 10"/><path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3 8 8 10 5-2 8-5 8-10V6l-8-4Z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 2h7l5 5v15H5V2h2Zm7 0v5h5M8 13h8M8 17h6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7h.01"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+</svg>
+
+<div id="toastArea" class="toast-area" role="status" aria-live="polite"></div>
+
+<section id="authScreen" class="auth-screen">
+  <div class="auth-story">
+    <div class="auth-story-inner">
+      <div class="brand hero-brand"><span class="brand-mark"><svg class="icon"><use href="#i-send"></use></svg></span><strong class="brand-title">MessagePusher</strong></div>
+      <div class="hero-eyebrow"><span class="live-dot"></span> YOUR MESSAGE, EVERYWHERE</div>
+      <h1>重要的消息，<br>总能<span>准时抵达。</span></h1>
+      <p id="authSiteDescription">将邮件、Telegram、企业微信整合到同一个地方，让每条事件通知都清晰可见。</p>
+      <div class="hero-chips"><span>多平台推送</span><span>异步任务</span><span>安全管理</span></div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="hero-glow"></div>
+        <div class="visual-card visual-card-one"><span class="visual-icon"><svg class="icon"><use href="#i-send"></use></svg></span><div><b>备份已完成</b><small>刚刚 · 所有服务运行正常</small></div><span class="visual-check"><svg class="icon"><use href="#i-check"></use></svg></span></div>
+        <div class="visual-card visual-card-two"><span class="visual-icon violet"><svg class="icon"><use href="#i-mail"></use></svg></span><div><b>通知已发送</b><small>电子邮件 · Telegram · 企业微信</small></div><span class="visual-check"><svg class="icon"><use href="#i-check"></use></svg></span></div>
+        <div class="visual-orbit orbit-one"></div><div class="visual-orbit orbit-two"></div>
+      </div>
+    </div>
+    <div class="story-footer">简洁 · 自托管 · 开放源代码</div>
+  </div>
+  <div class="auth-panel">
+    <div class="auth-card">
+      <span class="eyebrow">欢迎使用</span>
+      <h2 id="authTitle">登录你的工作空间</h2>
+      <p class="muted" id="authSubtitle">管理推送渠道、发送密钥与每一条通知。</p>
+      <div class="auth-tabs" id="authTabs" role="tablist" aria-label="账户操作">
+        <button id="loginTab" type="button" class="active" role="tab" aria-selected="true">登录</button>
+        <button id="registerTab" type="button" role="tab" aria-selected="false" hidden>创建账户</button>
+      </div>
+      <div id="siteAnnouncementAuth" class="announcement" hidden></div>
+      <form id="loginForm">
+        <div class="field"><label for="loginUsername">用户名</label><input id="loginUsername" autocomplete="username" placeholder="输入用户名" required maxlength="60"></div>
+        <div class="field"><label for="loginPassword">密码</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="输入账户密码" required></div>
+        <button class="btn primary wide" type="submit">登录管理平台 <svg class="icon"><use href="#i-arrow"></use></svg></button>
+      </form>
+      <form id="registerForm" hidden>
+        <div class="field"><label for="registerUsername">设置用户名</label><input id="registerUsername" autocomplete="username" minlength="3" maxlength="60" pattern="[A-Za-z0-9_-]+" required placeholder="3–60 个英文字母、数字或连接符"></div>
+        <div class="field"><label for="registerPassword">设置密码</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="12" required placeholder="至少 12 个字符"></div>
+        <div class="field"><label for="registerConfirm">确认密码</label><input id="registerConfirm" type="password" autocomplete="new-password" minlength="12" required placeholder="再次输入密码"></div>
+        <button class="btn primary wide" type="submit">创建普通用户账户 <svg class="icon"><use href="#i-arrow"></use></svg></button>
+        <p class="hint center">注册完成后即可配置自己的推送渠道和 API 密钥。</p>
+      </form>
+      <p id="registrationStatus" class="auth-footnote">本站由管理员创建账户。如需使用，请联系站点管理员。</p>
+    </div>
+    <div class="auth-copyright">MessagePusher · Secure notification workspace</div>
+  </div>
 </section>
-<div id="mainPanel">
-<section>
-<div class="top"><div><h2>控制台</h2><div id="identity" class="hint"></div></div><div class="actions"><button class="secondary" id="refresh">刷新</button><button class="secondary" id="logout">退出登录</button></div></div>
-</section>
-<div class="columns">
-<section>
-<h2>发送密钥</h2><p class="hint">每个用户可创建多把密钥。Server酱格式适合替换现有服务地址；标准格式适合调用 JSON API。密钥只显示一次。</p>
-<ul id="keys"></ul>
-<form id="keyForm">
-<label for="keyName">密钥名称</label><input id="keyName" placeholder="例如：网站监控" required maxlength="80">
-<label for="keyFormat">密钥格式</label><select id="keyFormat"><option value="standard">标准 JSON API</option><option value="serverchan">Server酱 SCT 格式</option></select>
-<p><button type="submit">创建发送密钥</button></p>
-</form>
-<div id="reveal"><strong>请立即保存发送密钥</strong><p class="hint">出于安全考虑，页面刷新后不能再次查看完整密钥。</p><input id="newKey" readonly><p><button class="secondary" id="copyKey" type="button">复制密钥</button></p></div>
-</section>
-<section>
-<h2>发送测试消息</h2>
-<form id="sendForm">
-<label for="sendKey">发送密钥</label><input id="sendKey" type="password" placeholder="mpk_... 或 SCT..." autocomplete="off" required>
-<label for="eventTitle">标题</label><input id="eventTitle" value="MessagePusher 测试消息">
-<label for="eventBody">正文</label><textarea id="eventBody">如果收到这条通知，消息推送已经正常工作。</textarea>
-<label for="eventFiles">附件（最多 5 个，总计 2 MiB）</label><input id="eventFiles" type="file" multiple>
-<p><button type="submit">发送到所有已启用的平台</button></p>
-</form>
-<p class="hint">API 在消息成功加入发送队列后立即返回。每个平台的发送结果可在下方查看。</p>
-</section>
+
+<div id="appShell" class="app-shell" hidden>
+  <div id="sidebarShade" class="sidebar-shade" hidden></div>
+  <aside id="sidebar" class="sidebar" aria-label="主导航">
+    <div class="sidebar-brand brand">
+      <span class="brand-mark"><svg class="icon"><use href="#i-send"></use></svg></span>
+      <div class="brand-copy"><strong id="sidebarSiteName">MessagePusher</strong><small>通知管理平台</small></div>
+    </div>
+    <div class="sidebar-scroll">
+      <div class="nav-label">工作空间</div>
+      <nav class="nav-list" id="nav">
+        <button type="button" data-view="overview" class="nav-item active"><svg class="icon"><use href="#i-grid"></use></svg>概览</button>
+        <button type="button" data-view="send" class="nav-item"><svg class="icon"><use href="#i-send"></use></svg>发送消息</button>
+        <button type="button" data-view="providers" class="nav-item"><svg class="icon"><use href="#i-channel"></use></svg>推送渠道</button>
+        <button type="button" data-view="keys" class="nav-item"><svg class="icon"><use href="#i-key"></use></svg>API 密钥</button>
+        <button type="button" data-view="history" class="nav-item"><svg class="icon"><use href="#i-history"></use></svg>消息记录</button>
+        <div class="nav-label nav-secondary">系统与账户</div>
+        <button type="button" data-view="users" class="nav-item admin-only" hidden><svg class="icon"><use href="#i-users"></use></svg>用户管理</button>
+        <button type="button" data-view="site" class="nav-item admin-only" hidden><svg class="icon"><use href="#i-settings"></use></svg>站点设置</button>
+        <button type="button" data-view="account" class="nav-item"><svg class="icon"><use href="#i-user"></use></svg>我的账户</button>
+      </nav>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="sidebar-support"><svg class="icon"><use href="#i-shield"></use></svg><div><strong>安全连接</strong><small>账户与渠道独立管理</small></div></div>
+      <button type="button" id="logoutButton" class="sidebar-logout"><svg class="icon"><use href="#i-logout"></use></svg>退出登录</button>
+    </div>
+  </aside>
+
+  <div class="app-content">
+    <header class="app-header">
+      <div class="header-left">
+        <button type="button" id="mobileMenu" class="icon-button mobile-menu" aria-label="打开菜单" aria-expanded="false"><svg class="icon"><use href="#i-menu"></use></svg></button>
+        <span class="header-path" id="headerPath">工作空间 / 概览</span>
+      </div>
+      <div class="header-right"><span class="header-state"><span class="live-dot"></span> 服务已连接</span><div class="avatar" id="headerAvatar">MP</div><div class="header-user"><strong id="headerUsername">用户</strong><small id="headerRole">普通用户</small></div></div>
+    </header>
+
+    <main class="workspace">
+      <div class="page-top">
+        <div><span class="eyebrow" id="pageEyebrow">WORKSPACE OVERVIEW</span><h1 id="pageTitle">工作空间概览</h1><p class="page-desc" id="pageDescription">了解通知发送情况，快速管理你的工作空间。</p></div>
+        <button type="button" id="refreshButton" class="btn ghost"><svg class="icon"><use href="#i-refresh"></use></svg>刷新数据</button>
+      </div>
+      <div id="siteAnnouncement" class="announcement workspace-announcement" hidden></div>
+
+      <section class="view" id="view-overview">
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-icon teal"><svg class="icon"><use href="#i-channel"></use></svg></div><span class="stat-label">我的推送渠道</span><div class="stat-value" id="statProviders">—</div><span class="stat-foot">已配置的平台</span></div>
+          <div class="stat-card"><div class="stat-icon blue"><svg class="icon"><use href="#i-key"></use></svg></div><span class="stat-label">有效 API 密钥</span><div class="stat-value" id="statKeys">—</div><span class="stat-foot">可随时撤销</span></div>
+          <div class="stat-card"><div class="stat-icon violet"><svg class="icon"><use href="#i-send"></use></svg></div><span class="stat-label">最近消息</span><div class="stat-value" id="statEvents">—</div><span class="stat-foot">最近 50 条以内</span></div>
+          <div class="stat-card"><div class="stat-icon amber"><svg class="icon"><use href="#i-clock"></use></svg></div><span class="stat-label">等待发送</span><div class="stat-value" id="statPending">—</div><span class="stat-foot">根据最近记录统计</span></div>
+        </div>
+        <div class="content-grid">
+          <article class="panel"><div class="panel-head"><div><h2>快速开始</h2><p>三步配置你的第一个通知</p></div><span class="panel-kicker">GET STARTED</span></div>
+            <div class="steps">
+              <button type="button" class="step" data-view="providers"><span class="step-no">01</span><span><strong>添加推送渠道</strong><small>邮箱、Telegram 或企业微信</small></span><svg class="icon"><use href="#i-chevron"></use></svg></button>
+              <button type="button" class="step" data-view="keys"><span class="step-no">02</span><span><strong>创建 API 密钥</strong><small>每个应用使用独立的发送密钥</small></span><svg class="icon"><use href="#i-chevron"></use></svg></button>
+              <button type="button" class="step" data-view="send"><span class="step-no">03</span><span><strong>发送一条测试消息</strong><small>可以添加附件，实时查看结果</small></span><svg class="icon"><use href="#i-chevron"></use></svg></button>
+            </div>
+          </article>
+          <article class="panel"><div class="panel-head"><div><h2>最近动态</h2><p>最近发送的消息</p></div><button type="button" data-view="history" class="text-button">全部记录 <svg class="icon"><use href="#i-arrow"></use></svg></button></div><div id="overviewEvents" class="activity-list"></div></article>
+        </div>
+        <article class="callout"><div class="callout-icon"><svg class="icon"><use href="#i-info"></use></svg></div><div><h3>一个接口，连接多个平台</h3><p>各平台可以独立启用或暂停。即使某个平台出现暂时性故障，其他平台的发送也会继续进行。</p></div><button type="button" class="btn secondary" data-view="send">立即发送 <svg class="icon"><use href="#i-arrow"></use></svg></button></article>
+      </section>
+
+      <section class="view" id="view-send" hidden>
+        <div class="panel send-panel"><div class="panel-head"><div><h2>新建消息</h2><p>发送到已启用的渠道，支持最多 5 个附件</p></div><span class="tiny-badge"><span class="live-dot"></span> 异步发送</span></div>
+          <form id="sendForm" class="form-stack">
+            <div class="field"><label for="sendKey">发送密钥 <span class="required">*</span></label><input id="sendKey" type="password" autocomplete="off" spellcheck="false" required placeholder="粘贴 mpk_ 或 SCT 开头的发送密钥"><p class="hint">密钥仅用于本次发送；刚创建的密钥会自动填入。</p></div>
+            <div class="field"><label for="sendTitle">消息标题</label><input id="sendTitle" maxlength="250" placeholder="例如：数据库备份完成" value="MessagePusher 测试消息"></div>
+            <div class="field"><label for="sendBody">消息正文</label><textarea id="sendBody" rows="5" maxlength="100000" placeholder="输入需要发送的内容">如果收到这条通知，消息推送功能已正常工作。</textarea></div>
+            <div class="field"><label for="sendFiles">附件 <span class="field-optional">可选</span></label><label for="sendFiles" class="file-drop"><svg class="icon"><use href="#i-file"></use></svg><span>点击选择附件</span><small>最多 5 个文件，总大小不超过 2 MiB</small></label><input id="sendFiles" type="file" multiple class="visually-hidden"><div id="fileSelection" class="file-selection"></div></div>
+            <div class="field"><label>发送范围</label><div class="choice-row"><label class="choice"><input type="radio" name="sendMode" value="all" checked><span>所有已启用渠道</span></label><label class="choice"><input type="radio" name="sendMode" value="select"><span>选择指定渠道</span></label></div><div id="targetProviders" class="target-options" hidden></div></div>
+            <div class="form-actions"><button type="submit" class="btn primary"><svg class="icon"><use href="#i-send"></use></svg>提交发送</button><span class="hint">提交成功后，可在消息记录中查看各平台的发送状态。</span></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="view" id="view-providers" hidden>
+        <div class="section-toolbar"><div class="section-copy"><h2>已配置的推送渠道</h2><p>可以添加同一种平台的多个账户，也可为不同平台使用不同的消息代理。</p></div><button type="button" class="btn primary" id="addProviderButton"><svg class="icon"><use href="#i-plus"></use></svg>添加渠道</button></div>
+        <div id="providerCards" class="provider-grid"></div>
+      </section>
+
+      <section class="view" id="view-keys" hidden>
+        <div class="section-toolbar"><div class="section-copy"><h2>发送密钥</h2><p>为不同应用创建独立密钥；完整密钥仅在创建时显示一次。</p></div><button type="button" class="btn primary" id="addKeyButton"><svg class="icon"><use href="#i-plus"></use></svg>创建密钥</button></div>
+        <div id="keyReveal" class="secret-reveal" hidden><div><strong>新密钥已创建，请立即保存</strong><p>关闭页面后将无法再次查看这串密钥。</p></div><div class="secret-row"><input id="newKey" readonly aria-label="新创建的发送密钥"><button type="button" id="copyKeyButton" class="btn secondary"><svg class="icon"><use href="#i-copy"></use></svg>复制</button></div></div>
+        <div class="panel table-panel"><div id="keysList"></div></div>
+        <div class="help-panel"><svg class="icon"><use href="#i-info"></use></svg><span>API 密钥用于发送消息；管理令牌用于管理账户与渠道。请勿在公开日志或程序截图中展示完整密钥。</span></div>
+      </section>
+
+      <section class="view" id="view-history" hidden>
+        <div class="panel table-panel"><div class="panel-head"><div><h2>消息发送记录</h2><p>分别查看每个渠道的发送状态与错误信息</p></div><button type="button" id="refreshHistoryButton" class="btn ghost small"><svg class="icon"><use href="#i-refresh"></use></svg>刷新</button></div><div id="historyList"></div></div>
+        <div id="eventDetails" class="panel event-details" hidden></div>
+      </section>
+
+      <section class="view" id="view-users" hidden>
+        <div class="section-toolbar"><div class="section-copy"><h2>用户与权限</h2><p>创建、停用账户，调整管理员权限及重置用户密码。</p></div><button type="button" class="btn primary" id="addUserButton"><svg class="icon"><use href="#i-plus"></use></svg>添加用户</button></div>
+        <div class="panel table-panel"><div id="usersList"></div></div>
+      </section>
+
+      <section class="view" id="view-site" hidden>
+        <div class="settings-grid">
+          <div class="panel"><div class="panel-head"><div><h2>站点基本信息</h2><p>这些内容将在登录页面和导航栏显示</p></div></div>
+            <form id="siteForm" class="form-stack">
+              <div class="field"><label for="siteName">站点名称</label><input id="siteName" maxlength="60" required></div>
+              <div class="field"><label for="siteDescription">站点简介</label><textarea id="siteDescription" rows="3" maxlength="160"></textarea></div>
+              <div class="field"><label for="siteAnnouncementInput">站点公告 <span class="field-optional">可选</span></label><textarea id="siteAnnouncementInput" rows="3" maxlength="500" placeholder="留空表示不显示公告"></textarea></div>
+              <div class="setting-toggle"><div><strong>允许用户自行注册</strong><p>启用后，登录页面显示注册入口。新账户始终为普通用户，无法管理站点。</p></div><label class="switch"><input id="allowRegistration" type="checkbox" aria-label="允许用户自行注册"><span class="switch-track"></span></label></div>
+              <div class="form-actions"><button type="submit" class="btn primary">保存站点设置</button></div>
+            </form>
+          </div>
+          <div><article class="side-note"><div class="side-note-icon"><svg class="icon"><use href="#i-shield"></use></svg></div><h3>账户与注册安全</h3><p>默认关闭公开注册。开启后，注册账户自动获得普通用户权限，且每小时最多允许注册 60 个账户。管理员可以随时停用账户、调整权限或关闭注册。</p></article>
+            <article class="side-note muted-note"><h3>公开信息</h3><p>站点名称、简介、公告和注册开关会显示在登录页面。推送平台密钥和账户信息只向获得相应权限的用户提供。</p></article></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-account" hidden>
+        <div class="settings-grid">
+          <article class="panel"><div class="panel-head"><div><h2>账户信息</h2><p>当前登录账户的基本资料</p></div></div><div class="account-summary"><div class="account-avatar" id="accountAvatar">MP</div><div><strong id="accountUsername">—</strong><span id="accountRole">—</span></div></div><div class="detail-row"><span>账户状态</span><strong>正常</strong></div><div class="detail-row"><span>账户权限</span><strong id="accountPermission">—</strong></div></article>
+          <article class="panel"><div class="panel-head"><div><h2>修改登录密码</h2><p>密码更新后将退出当前账户，需使用新密码重新登录。</p></div></div>
+            <form id="passwordForm" class="form-stack"><div class="field"><label for="currentPassword">当前密码</label><input id="currentPassword" type="password" autocomplete="current-password" required></div><div class="field"><label for="newPassword">新密码</label><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required placeholder="至少 12 个字符"></div><div class="field"><label for="confirmPassword">确认新密码</label><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></div><div class="form-actions"><button class="btn primary" type="submit">更新密码</button></div></form>
+          </article>
+        </div>
+      </section>
+    </main>
+    <footer class="app-footer"><span>MessagePusher · Your messages, delivered.</span><span>运行于 Rust · PostgreSQL</span></footer>
+  </div>
 </div>
-<section>
-<h2>推送平台</h2>
-<ul id="providers"></ul>
-<h3>添加平台</h3>
-<form id="providerForm">
-<div class="row"><div><label for="providerName">自定义名称</label><input id="providerName" placeholder="例如：我的 Telegram" required></div>
-<div><label for="providerKind">平台类型</label><select id="providerKind">
-<option value="telegram">Telegram Bot</option>
-<option value="wecom_app">企业微信自建应用</option>
-<option value="wecom_webhook">企业微信群机器人</option>
-<option value="email_smtp">电子邮件 SMTP</option>
-<option value="email_resend">电子邮件 Resend API</option>
-</select></div></div>
-<label for="providerSettings">平台参数（JSON）</label><textarea id="providerSettings" spellcheck="false" required></textarea>
-<p class="hint" id="providerHint"></p>
-<label for="routeMode">发送方式</label><select id="routeMode"><option value="direct">主程序直接发送</option><option value="proxy">通过无状态消息代理发送</option></select>
-<div id="proxyFields" style="display:none">
-<label for="proxyUrl">代理 HTTPS 地址</label><input id="proxyUrl" placeholder="https://your-relay.vercel.app/">
-<label for="proxySecret">代理共享密钥</label><input id="proxySecret" type="password" autocomplete="new-password" placeholder="与 RELAY_SECRET 一致">
-</div>
-<p><button type="submit">保存推送平台</button></p>
-</form>
-</section>
-<section><div class="top"><h2>最近消息</h2><small>最多显示 50 条</small></div><ul id="events"></ul><pre id="eventDetail" style="display:none"></pre></section>
-<section id="adminSection"><h2>用户管理（管理员）</h2><ul id="users"></ul><h3>创建用户</h3>
-<form id="userForm"><div class="row"><div><label for="userName">用户名</label><input id="userName" required></div><div><label for="userRole">权限</label><select id="userRole"><option value="user">普通用户</option><option value="admin">管理员</option></select></div></div>
-<label for="userPassword">初始密码（至少 12 个字符）</label><input id="userPassword" type="password" minlength="12" required>
-<p><button type="submit">创建用户</button></p></form></section>
-</div>
-</main>
-<script type="module">
-const $ = id => document.getElementById(id);
-let token = sessionStorage.getItem('mp_session') || '';
-let me = null;
-const examples = {
- telegram: { bot_token: '123456:BOT_TOKEN', bot_username: 'MyNotifyBot', webhook_secret: 'CHANGE_TO_RANDOM_32_CHARACTERS' },
- wecom_app: { corp_id: 'ww...', corp_secret: 'APP_SECRET', agent_id: 1000002 },
- wecom_webhook: { webhook_key: 'WEBHOOK_KEY' },
- email_smtp: { host: 'smtp.example.com', port: 587, tls: 'starttls', username: 'me@example.com', password: 'SMTP_APP_PASSWORD', from: 'me@example.com', to: ['receiver@example.com'] },
- email_resend: { api_key: 're_...', from: 'notify@example.com', to: ['receiver@example.com'] }
-};
-const hints = {
- telegram: '首次私聊接收：填入机器人用户名和 webhook_secret，保存后点击平台上的“设置 Webhook”，再点击“获取订阅链接”。如果已知 chat_id，也可直接在 JSON 中添加 chat_id。',
- wecom_app: '需先在企业微信管理后台创建自建应用并设置网页授权可信域名。保存后使用“获取授权链接”，由企业成员在企业微信中打开。',
- wecom_webhook: '填写群机器人地址中 key= 后面的值。它会向所在群发送通知。',
- email_smtp: '由主程序通过 SMTP 直接发送。邮件附件采用 MIME 格式，不能通过 FaaS 代理使用该类型。',
- email_resend: '通过 Resend 的 HTTPS API 发送。支持主程序直接发送或通过消息代理发送，并可携带附件。'
-};
-const setNotice = (message, error = false) => {
-  const box = $('notice'); box.style.display = 'block';
-  box.textContent = message; box.style.borderColor = error ? '#db9494' : '#b6cce3';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-};
-async function request(path, options = {}) {
-  const headers = new Headers(options.headers || {});
-  if (token) headers.set('Authorization', 'Bearer ' + token);
-  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  const response = await fetch(path, { ...options, headers });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || 'HTTP ' + response.status);
-  return result;
-}
-async function refresh() {
-  if (!token) return showLogin();
-  try {
-    me = await request('/v1/me');
-    $('identity').textContent = me.username + ' · ' + (me.role === 'admin' ? '管理员' : '普通用户');
-    $('loginSection').style.display = 'none';
-    $('mainPanel').style.display = 'block';
-    $('adminSection').style.display = me.role === 'admin' ? 'block' : 'none';
-    await Promise.all([loadKeys(), loadProviders(), loadEvents(), me.role === 'admin' ? loadUsers() : Promise.resolve()]);
-  } catch (error) {
-    if (error.message.includes('Authentication')) { token = ''; sessionStorage.removeItem('mp_session'); showLogin(); }
-    setNotice(error.message, true);
-  }
-}
-function showLogin() { $('loginSection').style.display = 'block'; $('mainPanel').style.display = 'none'; }
-function button(label, handler, danger = false) {
-  const element = document.createElement('button');
-  element.type = 'button'; element.textContent = label; element.className = danger ? 'danger' : 'secondary';
-  element.addEventListener('click', () => Promise.resolve(handler()).catch(error => setNotice(error.message, true)));
-  return element;
-}
-function listItem(parent, title, subtitle, buttons = []) {
-  const item = document.createElement('li');
-  const left = document.createElement('div');
-  const name = document.createElement('div'); name.className = 'name'; name.textContent = title;
-  const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = subtitle;
-  const actions = document.createElement('div'); actions.className = 'actions'; buttons.forEach(b => actions.append(b));
-  left.append(name, meta); item.append(left, actions); parent.append(item);
-}
-async function loadKeys() {
-  const data = await request('/v1/keys'); const parent = $('keys'); parent.replaceChildren();
-  for (const key of data) listItem(parent, key.name, key.prefix + '…',
-    [button('撤销', async () => { if (confirm('确定撤销这把密钥吗？')) { await request('/v1/keys/' + key.id, { method: 'DELETE' }); await loadKeys(); } }, true)]);
-  if (!data.length) listItem(parent, '暂无发送密钥', '先创建一把密钥');
-}
-async function loadProviders() {
-  const data = await request('/v1/providers'); const parent = $('providers'); parent.replaceChildren();
-  for (const p of data) {
-    const buttons = [];
-    if (p.kind === 'telegram') {
-      buttons.push(button('设置 Webhook', async () => { await request('/v1/providers/' + p.id + '/telegram/webhook', { method: 'POST' }); setNotice('Telegram Webhook 设置成功'); }));
-      buttons.push(button('获取订阅链接', async () => { const d = await request('/v1/providers/' + p.id + '/telegram/subscribe', { method: 'POST' }); showLink(d.url); }));
-    }
-    if (p.kind === 'wecom_app') buttons.push(button('获取授权链接', async () => { const d = await request('/v1/providers/' + p.id + '/wecom/subscribe', { method: 'POST' }); showLink(d.url); }));
-    buttons.push(button('删除', async () => { if (confirm('删除平台“' + p.name + '”？')) { await request('/v1/providers/' + p.id, { method: 'DELETE' }); await loadProviders(); } }, true));
-    const status = (p.enabled ? '已启用' : '已禁用') + ' · ' + (p.subscribed ? '可以尝试发送' : '尚未绑定接收者') + ' · ' + p.delivery;
-    listItem(parent, p.name + ' (' + p.kind + ')', status, buttons);
-  }
-  if (!data.length) listItem(parent, '暂无推送平台', '可以同时添加多个邮件、企业微信和 Telegram 平台');
-}
-function showLink(url) {
-  const link = new URL(url);
-  if (!['https://t.me', 'https://open.weixin.qq.com'].includes(link.origin)) throw new Error('Unexpected authorization address');
-  setNotice('授权链接（15 分钟有效）：\n' + url + '\n\n请复制到浏览器，或在对应 App 中打开。');
-}
-async function loadEvents() {
-  const data = await request('/v1/events'); const parent = $('events'); parent.replaceChildren();
-  for (const event of data) {
-    listItem(parent, event.title || '（无标题）',
-      new Date(event.created_at).toLocaleString() + ' · 已发送 ' + event.sent + '/' + event.total + ' · 失败 ' + event.failed,
-      [button('查看详情', async () => {
-        const detail = await request('/v1/events/' + event.id);
-        $('eventDetail').style.display = 'block';
-        $('eventDetail').textContent = JSON.stringify(detail, null, 2);
-      })]);
-  }
-  if (!data.length) listItem(parent, '还没有消息', '完成第一次发送后，消息会显示在这里');
-}
-async function loadUsers() {
-  const data = await request('/v1/users'); const parent = $('users'); parent.replaceChildren();
-  for (const u of data) {
-    const buttons = u.id === me.id ? [] : [button(u.active ? '停用' : '启用', async () => {
-      await request('/v1/users/' + u.id, { method: 'PATCH', body: JSON.stringify({ active: !u.active }) }); await loadUsers();
-    }), button('删除', async () => {
-      if (confirm('确定删除用户及其所有密钥、平台和消息记录吗？')) { await request('/v1/users/' + u.id, { method: 'DELETE' }); await loadUsers(); }
-    }, true)];
-    listItem(parent, u.username, u.role + ' · ' + (u.active ? '正常' : '已停用'), buttons);
-  }
-}
-function chooseTemplate() {
-  const kind = $('providerKind').value;
-  $('providerSettings').value = JSON.stringify(examples[kind], null, 2);
-  $('providerHint').textContent = hints[kind];
-  if (kind === 'email_smtp') { $('routeMode').value = 'direct'; $('routeMode').disabled = true; } else $('routeMode').disabled = false;
-  $('proxyFields').style.display = $('routeMode').value === 'proxy' ? 'block' : 'none';
-}
-$('providerKind').addEventListener('change', chooseTemplate);
-$('routeMode').addEventListener('change', () => { $('proxyFields').style.display = $('routeMode').value === 'proxy' ? 'block' : 'none'; });
-$('loginForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  try { const d = await request('/v1/login', { method: 'POST', body: JSON.stringify({ username: $('username').value, password: $('password').value }) });
-    token = d.token; sessionStorage.setItem('mp_session', token); $('password').value = ''; await refresh();
-  } catch (error) { setNotice(error.message, true); }
-});
-$('logout').addEventListener('click', () => { sessionStorage.removeItem('mp_session'); token = ''; showLogin(); });
-$('refresh').addEventListener('click', refresh);
-$('keyForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  try {
-    const result = await request('/v1/keys', { method: 'POST', body: JSON.stringify({ name: $('keyName').value, format: $('keyFormat').value }) });
-    $('reveal').style.display = 'block'; $('newKey').value = result.key; $('sendKey').value = result.key;
-    await loadKeys(); setNotice('密钥创建成功，请复制并妥善保存。');
-  } catch (error) { setNotice(error.message, true); }
-});
-$('copyKey').addEventListener('click', () => navigator.clipboard.writeText($('newKey').value).then(() => setNotice('密钥已复制到剪贴板')).catch(e => setNotice(e.message, true)));
-$('providerForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  try {
-    const delivery = $('routeMode').value === 'direct' ? { mode: 'direct' } :
-      { mode: 'proxy', url: $('proxyUrl').value, secret: $('proxySecret').value };
-    await request('/v1/providers', { method: 'POST', body: JSON.stringify({
-      name: $('providerName').value, kind: $('providerKind').value,
-      settings: JSON.parse($('providerSettings').value), delivery
-    }) });
-    $('providerName').value = ''; await loadProviders(); setNotice('推送平台已保存。');
-  } catch (error) { setNotice(error.message, true); }
-});
-async function encodeFile(file) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  return { filename: file.name, content_type: file.type || 'application/octet-stream', data_base64: btoa(binary) };
-}
-$('sendForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  try {
-    const files = Array.from($('eventFiles').files);
-    if (files.length > 5 || files.reduce((n, f) => n + f.size, 0) > 2 * 1024 * 1024) throw new Error('最多 5 个附件，总大小不超过 2 MiB');
-    const attachments = await Promise.all(files.map(encodeFile));
-    const result = await request('/v1/send', { method: 'POST', headers: { authorization: 'Bearer ' + $('sendKey').value.trim() },
-      body: JSON.stringify({ title: $('eventTitle').value, body: $('eventBody').value, attachments }) });
-    setNotice('消息已进入队列。编号：' + result.id);
-    await loadEvents();
-  } catch (error) { setNotice(error.message, true); }
-});
-$('userForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  try {
-    await request('/v1/users', { method: 'POST', body: JSON.stringify({
-      username: $('userName').value, password: $('userPassword').value, role: $('userRole').value
-    }) });
-    $('userPassword').value = ''; $('userName').value = ''; await loadUsers(); setNotice('用户已创建。');
-  } catch (error) { setNotice(error.message, true); }
-});
-chooseTemplate(); if (token) refresh(); else showLogin();
-</script>
-</body></html>
+
+<dialog id="providerDialog" class="modal">
+  <div class="modal-head"><div><span class="eyebrow">DELIVERY PROVIDER</span><h2 id="providerDialogTitle">添加推送渠道</h2></div><button type="button" class="icon-button" data-close="providerDialog" aria-label="关闭窗口"><svg class="icon"><use href="#i-close"></use></svg></button></div>
+  <form id="providerForm" class="modal-body">
+    <div class="field"><label for="providerName">渠道名称</label><input id="providerName" maxlength="100" required placeholder="例如：我的 Telegram"></div>
+    <div class="field"><label for="providerKind">平台类型</label><select id="providerKind"><option value="telegram">Telegram 机器人</option><option value="wecom_app">企业微信自建应用</option><option value="wecom_webhook">企业微信群机器人</option><option value="email_smtp">SMTP 邮件</option><option value="email_resend">Resend 邮件 API</option></select></div>
+    <div id="providerFields" class="dynamic-fields"></div>
+    <div class="modal-divider"></div>
+    <div class="field"><label for="providerMode">发送方式</label><select id="providerMode"><option value="direct">主程序直接发送</option><option value="proxy">经无状态消息代理发送</option></select></div>
+    <div id="providerRelayFields" hidden><div class="field"><label for="providerRelayUrl">代理 HTTPS 地址</label><input id="providerRelayUrl" type="url" placeholder="https://your-relay.example.com/"></div><div class="field"><label for="providerRelaySecret">代理共享密钥</label><input id="providerRelaySecret" type="password" autocomplete="new-password" placeholder="至少 24 个字符"></div></div>
+    <label class="choice modal-choice"><input type="checkbox" id="providerEnabled" checked><span>启用此推送渠道</span></label>
+    <p id="providerHelp" class="hint"></p>
+    <div class="dialog-actions"><button type="button" class="btn ghost" data-close="providerDialog">取消</button><button type="submit" class="btn primary">保存渠道</button></div>
+  </form>
+</dialog>
+
+<dialog id="keyDialog" class="modal compact-modal">
+  <div class="modal-head"><div><span class="eyebrow">API CREDENTIAL</span><h2>创建发送密钥</h2></div><button type="button" class="icon-button" data-close="keyDialog" aria-label="关闭窗口"><svg class="icon"><use href="#i-close"></use></svg></button></div>
+  <form id="keyForm" class="modal-body">
+    <div class="field"><label for="keyName">密钥名称</label><input id="keyName" maxlength="80" required placeholder="例如：服务器监控"></div>
+    <div class="field"><label for="keyFormat">密钥格式</label><select id="keyFormat"><option value="standard">标准 API（mpk_）</option><option value="serverchan">Server酱兼容（SCT）</option></select><p class="hint">两种密钥均可调用所有已支持的发送 API。</p></div>
+    <div class="dialog-actions"><button type="button" class="btn ghost" data-close="keyDialog">取消</button><button type="submit" class="btn primary">创建密钥</button></div>
+  </form>
+</dialog>
+
+<dialog id="userDialog" class="modal compact-modal">
+  <div class="modal-head"><div><span class="eyebrow">ACCOUNT MANAGEMENT</span><h2 id="userDialogTitle">添加用户</h2></div><button type="button" class="icon-button" data-close="userDialog" aria-label="关闭窗口"><svg class="icon"><use href="#i-close"></use></svg></button></div>
+  <form id="userForm" class="modal-body">
+    <div class="field"><label for="manageUsername">用户名</label><input id="manageUsername" minlength="3" maxlength="60" pattern="[A-Za-z0-9_-]+" required></div>
+    <div class="field"><label for="manageRole">权限</label><select id="manageRole"><option value="user">普通用户</option><option value="admin">管理员</option></select></div>
+    <div class="field"><label for="managePassword">账户密码</label><input id="managePassword" type="password" autocomplete="new-password" minlength="12" placeholder="至少 12 个字符"><p class="hint" id="managePasswordHint">创建账户时必须填写密码。</p></div>
+    <label class="choice modal-choice" id="manageActiveRow" hidden><input id="manageActive" type="checkbox" checked><span>启用此账户</span></label>
+    <div class="dialog-actions"><button type="button" class="btn ghost" data-close="userDialog">取消</button><button type="submit" class="btn primary">保存账户</button></div>
+  </form>
+</dialog>
+
+<dialog id="linkDialog" class="modal compact-modal">
+  <div class="modal-head"><div><span class="eyebrow">ACCOUNT AUTHORIZATION</span><h2>接收者授权链接</h2></div><button type="button" class="icon-button" data-close="linkDialog" aria-label="关闭窗口"><svg class="icon"><use href="#i-close"></use></svg></button></div>
+  <div class="modal-body"><p class="muted">请将此链接交给接收消息的人，链接在 15 分钟后失效。</p><div class="field"><label for="linkValue">授权链接</label><input id="linkValue" readonly></div><div class="dialog-actions"><button type="button" id="copyLinkButton" class="btn secondary"><svg class="icon"><use href="#i-copy"></use></svg>复制链接</button><button type="button" id="openLinkButton" class="btn primary">打开链接 <svg class="icon"><use href="#i-external"></use></svg></button></div></div>
+</dialog>
+</body>
+</html>

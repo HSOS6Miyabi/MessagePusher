@@ -58,14 +58,14 @@ pub fn password_valid(encoded: &str, password: &str) -> bool {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Claims { sub: String, exp: usize, iat: usize }
-pub fn session_token(user_id: Uuid, secret: &[u8]) -> Result<String> {
+struct Claims { sub: String, exp: usize, iat: usize, ver: i64 }
+pub fn session_token(user_id: Uuid, version: i64, secret: &[u8]) -> Result<String> {
     let issued = Utc::now().timestamp() as usize;
-    Ok(encode(&Header::new(Algorithm::HS256), &Claims { sub: user_id.to_string(), iat: issued, exp: issued + 86400 }, &EncodingKey::from_secret(secret))?)
+    Ok(encode(&Header::new(Algorithm::HS256), &Claims { sub: user_id.to_string(), iat: issued, exp: issued + 86400, ver: version }, &EncodingKey::from_secret(secret))?)
 }
-pub fn verify_session(token: &str, secret: &[u8]) -> Result<Uuid> {
+pub fn verify_session(token: &str, secret: &[u8]) -> Result<(Uuid, i64)> {
     let data = decode::<Claims>(token, &DecodingKey::from_secret(secret), &Validation::new(Algorithm::HS256))?;
-    Ok(Uuid::parse_str(&data.claims.sub)?)
+    Ok((Uuid::parse_str(&data.claims.sub)?, data.claims.ver))
 }
 pub fn hmac_hex(secret: &str, timestamp: i64, body: &[u8]) -> String {
     let mut signer = <Hmac<Sha256> as Mac>::new_from_slice(secret.as_bytes()).expect("valid hmac key");
@@ -99,8 +99,8 @@ mod tests {
         assert!(password_valid(&pass,"a-long-password123"));
         assert!(!password_valid(&pass,"incorrect-password"));
         let uid = Uuid::new_v4();
-        let token = session_token(uid,b"a very long private jwt secret for tests").unwrap();
-        assert_eq!(verify_session(&token,b"a very long private jwt secret for tests").unwrap(), uid);
+        let token = session_token(uid, 3, b"a very long private jwt secret for tests").unwrap();
+        assert_eq!(verify_session(&token,b"a very long private jwt secret for tests").unwrap(), (uid, 3));
     }
     #[test]
     fn hmac_is_stable() {
