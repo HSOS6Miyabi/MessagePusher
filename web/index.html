@@ -74,7 +74,7 @@
         <button class="btn primary wide" type="submit">登录管理平台 <svg class="icon"><use href="#i-arrow"></use></svg></button>
       </form>
       <form id="registerForm" hidden>
-        <div class="field"><label for="registerUsername">设置用户名</label><input id="registerUsername" autocomplete="username" minlength="3" maxlength="60" pattern="[A-Za-z0-9_-]+" required placeholder="3–60 个英文字母、数字或连接符"></div>
+        <div class="field"><label for="registerUsername">设置用户名</label><input id="registerUsername" autocomplete="username" minlength="3" maxlength="60" pattern="[A-Za-z0-9_\-]+" required placeholder="3–60 个英文字母、数字或连接符"></div>
         <div class="field"><label for="registerPassword">设置密码</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="12" required placeholder="至少 12 个字符"></div>
         <div class="field"><label for="registerConfirm">确认密码</label><input id="registerConfirm" type="password" autocomplete="new-password" minlength="12" required placeholder="再次输入密码"></div>
         <button class="btn primary wide" type="submit">创建普通用户账户 <svg class="icon"><use href="#i-arrow"></use></svg></button>
@@ -247,7 +247,7 @@
 <dialog id="userDialog" class="modal compact-modal">
   <div class="modal-head"><div><span class="eyebrow">ACCOUNT MANAGEMENT</span><h2 id="userDialogTitle">添加用户</h2></div><button type="button" class="icon-button" data-close="userDialog" aria-label="关闭窗口"><svg class="icon"><use href="#i-close"></use></svg></button></div>
   <form id="userForm" class="modal-body">
-    <div class="field"><label for="manageUsername">用户名</label><input id="manageUsername" minlength="3" maxlength="60" pattern="[A-Za-z0-9_-]+" required></div>
+    <div class="field"><label for="manageUsername">用户名</label><input id="manageUsername" minlength="3" maxlength="60" pattern="[A-Za-z0-9_\-]+" required></div>
     <div class="field"><label for="manageRole">权限</label><select id="manageRole"><option value="user">普通用户</option><option value="admin">管理员</option></select></div>
     <div class="field"><label for="managePassword">账户密码</label><input id="managePassword" type="password" autocomplete="new-password" minlength="12" placeholder="至少 12 个字符"><p class="hint" id="managePasswordHint">创建账户时必须填写密码。</p></div>
     <label class="choice modal-choice" id="manageActiveRow" hidden><input id="manageActive" type="checkbox" checked><span>启用此账户</span></label>

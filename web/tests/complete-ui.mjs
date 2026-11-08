@@ -409,6 +409,8 @@ try {
   await gotoView(desktop, 'users');
   await screenshot(desktop, '14-users-desktop');
   await desktop.locator('#addUserButton').click();
+  await desktop.locator('#manageUsername').fill('invalid username');
+  ok('User editor rejects invalid username', await desktop.locator('#manageUsername').evaluate(el => !el.checkValidity()));
   await desktop.locator('#manageUsername').fill('operational_user');
   await desktop.locator('#managePassword').fill('test-user-password-123');
   await screenshot(desktop, '15-user-editor-desktop');
@@ -475,7 +477,10 @@ try {
   ok('Registration enabled', await publicPage.locator('#registerTab').isVisible());
   await publicPage.locator('#registerTab').click();
   await screenshot(publicPage, '19-registration-desktop');
+  await publicPage.locator('#registerUsername').fill('invalid username');
+  ok('Registration username validation', await publicPage.locator('#registerUsername').evaluate(el => !el.checkValidity()));
   await publicPage.locator('#registerUsername').fill('self_registered');
+  ok('Valid registration username', await publicPage.locator('#registerUsername').evaluate(el => el.checkValidity()));
   await publicPage.locator('#registerPassword').fill('register-password-123');
   await publicPage.locator('#registerConfirm').fill('register-password-123');
   await publicPage.locator('#registerForm button[type="submit"]').click();
