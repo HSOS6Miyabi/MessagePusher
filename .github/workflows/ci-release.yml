@@ -52,6 +52,8 @@ jobs:
         working-directory: relay
       - name: Validate browser application JavaScript
         run: node --check web/app.js
+      - name: Validate Telegram end-to-end test syntax
+        run: node --check scripts/telegram-live-e2e.mjs
       - name: Verify API and database migration
         shell: bash
         run: |

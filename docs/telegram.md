@@ -205,3 +205,31 @@ curl -sS -X POST \
 ## 九、接入自己的应用
 
 通过 [API 接入指南](integration.md) 可以了解 JSON、multipart/form-data、Server酱兼容接口、发送密钥、指定渠道和发送状态查询的完整格式。
+
+## 十、独立环境中的端到端测试
+
+仓库提供 `scripts/telegram-live-e2e.mjs`，可以在独立的测试环境中验证 Rust 主程序、PostgreSQL 和 Telegram 的实际发送过程。它会创建临时普通用户、推送渠道和发送密钥，分别发送文字和文件，检查发送结果，并模拟一次具有正确密钥的订阅回调，最后删除临时测试账户。
+
+测试前请启动主程序，并确认它能够访问 Telegram。测试程序需要以下环境变量：
+
+| 环境变量 | 说明 |
+| --- | --- |
+| `E2E_BASE_URL` | 测试主程序地址，默认 `http://127.0.0.1:8080` |
+| `E2E_ADMIN_USERNAME` | 测试环境管理员用户名 |
+| `E2E_ADMIN_PASSWORD` | 测试环境管理员密码 |
+| `E2E_BOT_TOKEN` | 测试机器人 Token |
+| `E2E_CHAT_ID` | 可选。接收会话 ID；未填写时会尝试通过 `getUpdates` 查找已发送过消息的私人会话 |
+| `E2E_RELAY_URL` | 可选。需要一并测试代理时填写代理 URL |
+| `E2E_RELAY_SECRET` | 可选。对应代理的共享密钥 |
+
+在测试服务器中设置环境变量后运行：
+
+```bash
+node scripts/telegram-live-e2e.mjs
+```
+
+测试会实际向 Telegram 接收者发送通知与文件。为避免影响正常业务，请使用专门的测试环境和测试机器人。测试程序不会修改机器人现有的 Webhook，但会模拟一次经过认证的订阅回调，以检查服务器处理和数据库更新是否正确。
+
+如果机器人的 Webhook 已启用，请通过 `E2E_CHAT_ID` 明确指定接收会话，以便测试程序不调用 `getUpdates`。
+
+测试通过后，请根据需要更换测试机器人的 Token，并确认没有将 Token 写入代码、文档或日志。
