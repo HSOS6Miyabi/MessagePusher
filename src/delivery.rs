@@ -335,6 +335,65 @@ mod tests {
         let chunks=split_chars("你好世界",3);
         assert_eq!(chunks,vec!["你好世","界"]);
     }
+    #[tokio::test]
+    async fn smtp_delivers_a_mime_attachment() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let (read, mut write) = stream.into_split();
+            let mut lines = BufReader::new(read);
+            write.write_all(b"220 localhost ESMTP ready\r\n").await.unwrap();
+            let mut email = String::new();
+            let mut inside_data = false;
+            loop {
+                let mut line = String::new();
+                if lines.read_line(&mut line).await.unwrap() == 0 { break; }
+                if inside_data {
+                    if line == ".\r\n" || line == ".\n" {
+                        write.write_all(b"250 accepted\r\n").await.unwrap();
+                        break;
+                    }
+                    email.push_str(&line);
+                    continue;
+                }
+                let reply: &[u8] = if line.starts_with("EHLO ") || line.starts_with("HELO ") {
+                    b"250-localhost\r\n250 8BITMIME\r\n"
+                } else if line.starts_with("MAIL FROM:") || line.starts_with("RCPT TO:") {
+                    b"250 OK\r\n"
+                } else if line.starts_with("DATA") {
+                    inside_data = true;
+                    b"354 send data\r\n"
+                } else {
+                    panic!("Unexpected SMTP command: {line:?}");
+                };
+                write.write_all(reply).await.unwrap();
+            }
+            email
+        });
+        let item = RelayItem {
+            id: Uuid::new_v4(), kind: "email_smtp".into(),
+            settings: json!({
+                "host":"127.0.0.1","port":port,"tls":"none",
+                "from":"sender@example.com","to":["receiver@example.com"]
+            }),
+            title:"Integration test".into(), body:"Mail body".into(),
+            attachments:vec![Attachment {
+                filename:"report.txt".into(), content_type:"text/plain".into(),
+                data_base64:"aGVsbG8=".into()
+            }]
+        };
+        let result = tokio::time::timeout(Duration::from_secs(8), send_smtp(&item))
+            .await.expect("SMTP delivery timed out");
+        assert!(result.is_ok(), "SMTP error: {result:?}");
+        let email = tokio::time::timeout(Duration::from_secs(8), server)
+            .await.expect("SMTP server timed out").unwrap();
+        assert!(email.contains("multipart/mixed"));
+        assert!(email.contains("report.txt"));
+        assert!(email.contains("aGVsbG8="));
+    }
+
     #[test]
     fn endpoint_hosts_are_fixed(){
         let u=url::Url::parse("https://qyapi.weixin.qq.com/cgi-bin/webhook/send").unwrap();
