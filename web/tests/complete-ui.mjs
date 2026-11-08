@@ -314,9 +314,9 @@ try {
   ok('Localized connection failure', await desktop.evaluate(() =>
     deliveryErrorMessage('Connection error: Connection refused (os error 111)')
   ) === '连接失败：目标服务器拒绝连接');
-  ok('Localized deadline', await desktop.evaluate(() =>
+  ok('Localized deadline', (await desktop.evaluate(() =>
     deliveryErrorMessage('provider deadline exceeded')
-  ).startsWith('连接超时'));
+  )).startsWith('连接超时'));
   ok('Registration closed by default', await desktop.locator('#registerTab').isHidden());
   await screenshot(desktop, '01-login-desktop');
   await login(desktop);
