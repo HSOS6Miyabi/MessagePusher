@@ -26,7 +26,10 @@ curl -X POST https://push.example.com/v1/login \
 | `POST /v1/users` | 管理员 | 创建用户，字段为 `username`、`password`、`role` |
 | `PATCH /v1/users/{id}` | 管理员 | 修改 `role`、`active` 或 `password` |
 | `DELETE /v1/users/{id}` | 管理员 | 删除用户及其数据 |
-| `GET /v1/providers` | 登录用户 | 查看自己的平台及授权状态 |
+| `GET /v1/provider-catalog` | 所有人 | 查看当前开放的 Provider 类型 |
+| `GET /v1/admin/provider-catalog` | 管理员 | 查看所有内置 Provider 类型及启用状态 |
+| `PATCH /v1/admin/provider-catalog/{kind}` | 管理员 | 开放或暂停指定 Provider 类型，参数为 `{"enabled":true}` 或 `{"enabled":false}` |
+| `GET /v1/providers` | 登录用户 | 查看自己创建的平台及授权状态 |
 | `POST /v1/providers` | 登录用户 | 添加平台 |
 | `GET /v1/providers/{id}` | 登录用户 | 查看自己的平台，敏感配置只返回是否已经保存 |
 | `PUT /v1/providers/{id}` | 登录用户 | 完整更新平台 |
@@ -71,6 +74,23 @@ curl -X POST https://push.example.com/v1/me/password \
 ```
 
 修改成功后需要重新登录。管理员也可以通过 `PATCH /v1/users/{id}` 修改其他用户的密码、角色或启用状态。更改账户信息后，用户需要重新登录。
+
+### Provider 类型和个人渠道
+
+管理员控制系统向用户开放哪些 Provider 类型。调用 `GET /v1/provider-catalog` 即可查看当前可选的类型，例如 `email_smtp`、`telegram` 等。所有内置类型默认开放。
+
+管理员可暂停一个类型，例如：
+
+```bash
+curl -X PATCH https://push.example.com/v1/admin/provider-catalog/telegram \
+  -H 'Authorization: Bearer 管理令牌' \
+  -H 'Content-Type: application/json' \
+  -d '{"enabled":false}'
+```
+
+关闭后，用户仍保有自己已经配置的 Telegram 渠道，但无法新建该类型的渠道，新的发送任务不会再使用该类型，等待中的任务会暂停。重新开放后，等待中的任务自动继续处理。已经开始发送的请求可能完成。
+
+用户自行创建和编辑个人渠道，平台密码和收件人均由用户自己填写。用户只能查询、修改、删除自己创建的渠道，其他用户和管理员的账户身份不会自动获得查看这些渠道的权限。只有 Provider 类型的开放状态由管理员管理。
 
 ### 添加平台的格式
 

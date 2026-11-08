@@ -134,6 +134,62 @@ jobs:
           curl -fsS "http://127.0.0.1:8080/v1/providers/$PROVIDER" \
             -H "Authorization: Bearer $SESSION" \
             | python3 -c 'import json,sys; d=json.load(sys.stdin);assert d["enabled"]==False and d["name"]=="CI SMTP renamed"'
+          curl -fsS http://127.0.0.1:8080/v1/provider-catalog > /tmp/catalog.json
+          python3 -c 'import json; assert len(json.load(open("/tmp/catalog.json")))==5'
+          USERSESSION=$(python3 -c 'import json;print(json.load(open("/tmp/login-new.json"))["token"])')
+          curl -fsS -X POST http://127.0.0.1:8080/v1/providers \
+            -H "Authorization: Bearer $USERSESSION" -H 'Content-Type: application/json' \
+            -d '{"name":"Personal SMTP","kind":"email_smtp","settings":{"host":"127.0.0.1","port":25,"tls":"none","username":"user","password":"mail-secret","from":"user@example.com","to":["one@example.com"]}}' >/tmp/user-provider.json
+          USERPROVIDER=$(python3 -c 'import json;print(json.load(open("/tmp/user-provider.json"))["id"])')
+          curl -fsS "http://127.0.0.1:8080/v1/providers/$USERPROVIDER" \
+            -H "Authorization: Bearer $USERSESSION" > /tmp/user-view.json
+          python3 -c 'import json;d=json.load(open("/tmp/user-view.json")); assert d["name"]=="Personal SMTP" and "password" in d["stored_secrets"] and "password" not in d["settings"]'
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+            "http://127.0.0.1:8080/v1/providers/$USERPROVIDER" -H "Authorization: Bearer $SESSION")
+          test "$STATUS" = 404
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -X PATCH "http://127.0.0.1:8080/v1/providers/$PROVIDER" \
+            -H "Authorization: Bearer $USERSESSION" -H 'Content-Type: application/json' \
+            -d '{"name":"Unauthorized update"}')
+          test "$STATUS" = 404
+          curl -fsS -X PATCH "http://127.0.0.1:8080/v1/providers/$USERPROVIDER" \
+            -H "Authorization: Bearer $USERSESSION" -H 'Content-Type: application/json' \
+            -d '{"name":"My SMTP","settings":{"to":["two@example.com"]}}' >/tmp/user-patched.json
+          curl -fsS "http://127.0.0.1:8080/v1/providers/$USERPROVIDER" \
+            -H "Authorization: Bearer $USERSESSION" \
+            | python3 -c 'import json,sys;d=json.load(sys.stdin); assert d["name"]=="My SMTP" and "password" in d["stored_secrets"] and d["settings"]["to"]==["two@example.com"]'
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -X PATCH http://127.0.0.1:8080/v1/admin/provider-catalog/email_smtp \
+            -H "Authorization: Bearer $USERSESSION" -H 'Content-Type: application/json' -d '{"enabled":false}')
+          test "$STATUS" = 403
+          curl -fsS -X PATCH http://127.0.0.1:8080/v1/admin/provider-catalog/email_smtp \
+            -H "Authorization: Bearer $SESSION" -H 'Content-Type: application/json' \
+            -d '{"enabled":false}' > /tmp/catalog-disabled.json
+          curl -fsS http://127.0.0.1:8080/v1/provider-catalog \
+            | python3 -c 'import json,sys;assert "email_smtp" not in [x["kind"] for x in json.load(sys.stdin)]'
+          curl -fsS "http://127.0.0.1:8080/v1/providers/$USERPROVIDER" \
+            -H "Authorization: Bearer $USERSESSION" \
+            | python3 -c 'import json,sys;d=json.load(sys.stdin);assert d["kind"]=="email_smtp"'
+          curl -fsS http://127.0.0.1:8080/v1/providers -H "Authorization: Bearer $USERSESSION" \
+            | python3 -c 'import json,sys;d=json.load(sys.stdin);assert len(d)==1 and d[0]["available"] is False'
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/v1/providers \
+            -H "Authorization: Bearer $USERSESSION" -H 'Content-Type: application/json' \
+            -d '{"name":"Disabled SMTP","kind":"email_smtp","settings":{"host":"127.0.0.1","from":"sender@example.com","to":["receiver@example.com"]}}')
+          test "$STATUS" = 400
+          curl -fsS -X POST http://127.0.0.1:8080/v1/keys \
+            -H "Authorization: Bearer $USERSESSION" -H 'Content-Type: application/json' \
+            -d '{"name":"Personal key"}' >/tmp/user-key.json
+          USERKEY=$(python3 -c 'import json;print(json.load(open("/tmp/user-key.json"))["key"])')
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/v1/send \
+            -H "Authorization: Bearer $USERKEY" -H 'Content-Type: application/json' \
+            -d '{"title":"When provider type is paused","body":"No dispatch expected"}')
+          test "$STATUS" = 400
+          curl -fsS -X PATCH http://127.0.0.1:8080/v1/admin/provider-catalog/email_smtp \
+            -H "Authorization: Bearer $SESSION" -H 'Content-Type: application/json' \
+            -d '{"enabled":true}' >/tmp/catalog-enabled.json
+          curl -fsS http://127.0.0.1:8080/v1/provider-catalog \
+            | python3 -c 'import json,sys;assert "email_smtp" in [x["kind"] for x in json.load(sys.stdin)]'
+
 
 
   browser:

@@ -5,6 +5,7 @@ const state = {
   token: sessionStorage.getItem('mp_session') || '',
   site: {site_name:'MessagePusher',site_description:'一个接口，发送到你需要的每个平台。',announcement:'',allow_registration:false},
   me: null, providers: [], keys: [], events: [], users: [], overview: null,
+  catalog: [], adminCatalog: [],
   view: 'overview', currentKey: '', providerId: null, userId: null
 };
 const pages = {
@@ -162,19 +163,23 @@ async function refreshAll(){
     request('/v1/events'),
     loadSite(),
     me.role==='admin'?request('/v1/users'):Promise.resolve([]),
-    me.role==='admin'?request('/v1/admin/overview'):Promise.resolve(null)
+    me.role==='admin'?request('/v1/admin/overview'):Promise.resolve(null),
+    request('/v1/provider-catalog'),
+    me.role==='admin'?request('/v1/admin/provider-catalog'):Promise.resolve([])
   ];
-  const [providers,keys,events,,users,overview]=await Promise.all(tasks);
+  const [providers,keys,events,,users,overview,catalog,adminCatalog]=await Promise.all(tasks);
   state.providers=providers;state.keys=keys;state.events=events;
   state.users=users;state.overview=overview;
+  state.catalog=catalog;state.adminCatalog=adminCatalog;
   showApp();
   renderAll();
 }
 async function safeRefresh(){
-  try{await refreshAll();}
+  try{await refreshAll();return true;}
   catch(error){
     if(/Authentication required|Permission denied/.test(String(error.message))){logout('请重新登录。');}
     else showToast(friendlyError(error),true);
+    return false;
   }
 }
 function navigate(view){
@@ -260,8 +265,9 @@ function providerTitle(kind){return channels[kind]?.title||kind;}
 function renderProviders(){
   const parent=$('providerCards');parent.replaceChildren();
   if(!state.providers.length){
-    const box=empty('还没有推送渠道','添加一个邮箱、Telegram 或企业微信渠道，即可开始发送。','i-channel',
-      makeButton('添加第一个渠道',()=>openProviderDialog(), 'primary','i-plus'));
+    const action=state.catalog.length?makeButton('添加第一个渠道',()=>openProviderDialog(), 'primary','i-plus'):null;
+    const box=empty('还没有推送渠道',state.catalog.length?
+      '添加一个已开放的推送渠道，即可开始发送。':'本站目前尚未开放任何 Provider 类型。','i-channel',action);
     box.style.gridColumn='1/-1';parent.append(box);return;
   }
   for(const p of state.providers){
@@ -269,10 +275,12 @@ function renderProviders(){
     const header=node('div','provider-header');
     const symbol=node('div','provider-logo '+p.kind);symbol.append(svg(channels[p.kind]?.icon||'i-channel'));
     const info=node('div','provider-info');info.append(node('h3','',p.name),node('small','',providerTitle(p.kind)));
-    header.append(symbol,info,tag(p.enabled?'已启用':'已暂停',p.enabled?'':'paused'));
+    const usable=p.enabled && p.available!==false;
+    header.append(symbol,info,tag(p.available===false?'站点已暂停':(p.enabled?'已启用':'已暂停'),usable?'':'paused'));
     const meta=node('div','provider-meta');
     meta.append(node('span','',p.delivery==='proxy'?'经消息代理发送':'主程序直接发送'));
     if(!p.subscribed)meta.append(tag('等待接收者绑定','pending'));
+    if(p.available===false)meta.append(node('span','','管理员暂停了该 Provider 类型，现有配置已保留'));
     const actions=node('div','provider-actions');
     actions.append(makeButton('编辑',()=>openProviderDialog(p.id),'ghost','i-edit'));
     actions.append(makeButton(p.enabled?'暂停':'启用',async()=>{
@@ -329,7 +337,7 @@ function renderKeys(){
 }
 function renderTargets(){
   const target=$('targetProviders');target.replaceChildren();
-  const choices=state.providers.filter(p=>p.enabled);
+  const choices=state.providers.filter(p=>p.enabled && p.available!==false);
   if(!choices.length){target.append(node('p','hint','请先添加并启用至少一个推送渠道。'));return;}
   for(const p of choices){
     const label=node('label','choice');
@@ -403,8 +411,61 @@ function renderUsers(){
   }
   parent.append(list);
 }
+function renderProviderTypeOptions(selectedKind){
+  const select=$('providerKind');
+  const allowed=state.catalog;
+  const current=selectedKind||select.value;
+  select.replaceChildren();
+  for(const entry of allowed){
+    const option=node('option','',entry.label);
+    option.value=entry.kind;
+    select.append(option);
+  }
+  if(selectedKind&&!allowed.some(entry=>entry.kind===selectedKind)){
+    const option=node('option','',providerTitle(selectedKind)+'（站点已暂停）');
+    option.value=selectedKind;
+    select.append(option);
+  }
+  select.value=Array.from(select.options).some(option=>option.value===current)?current:(select.options[0]?.value||'');
+  $('addProviderButton').disabled=allowed.length===0;
+}
+function renderCatalog(){
+  const parent=$('providerCatalogList');
+  parent.replaceChildren();
+  if(state.me?.role!=='admin')return;
+  for(const entry of state.adminCatalog){
+    const row=node('div','catalog-row');
+    const mark=node('span','provider-logo catalog-provider-logo '+entry.kind);
+    mark.append(svg(channels[entry.kind]?.icon||'i-channel'));
+    const info=node('div','catalog-info');
+    info.append(node('strong','',entry.label),node('p','',entry.description));
+    const status=tag(entry.enabled?'向用户开放':'已暂停',entry.enabled?'':'paused');
+    const label=node('label','switch');
+    const control=document.createElement('input');
+    control.type='checkbox';control.checked=entry.enabled;
+    control.setAttribute('aria-label','向用户开放 '+entry.label);
+    const track=node('span','switch-track');
+    control.addEventListener('change',async()=>{
+      control.disabled=true;
+      try{
+        await request('/v1/admin/provider-catalog/'+encodeURIComponent(entry.kind),{
+          method:'PATCH',body:{enabled:control.checked}
+        });
+        await refreshAll();
+        showToast(entry.label+(control.checked?' 已向用户开放。':' 已暂停对外提供。'));
+      }catch(error){
+        control.checked=entry.enabled;
+        showToast(friendlyError(error),true);
+      }finally{control.disabled=false;}
+    });
+    label.append(control,track);
+    row.append(mark,info,status,label);
+    parent.append(row);
+  }
+}
 function renderAll(){
   renderOverview();renderProviders();renderKeys();renderTargets();renderHistory();renderUsers();
+  renderCatalog();renderProviderTypeOptions(state.providerDetails?.kind);
 }
 function showDialog(id){$(id).showModal();}
 function closeDialog(id){$(id).close();}
@@ -455,9 +516,11 @@ async function openProviderDialog(id){
   state.providerId=id||null;
   state.providerDetails=id?await request('/v1/providers/'+id):null;
   const details=state.providerDetails;
+  if(!details && !state.catalog.length)throw new Error('站点管理员尚未开放任何 Provider 类型。');
   setText('providerDialogTitle',id?'编辑推送渠道':'添加推送渠道');
   $('providerName').value=details?.name||'';
-  $('providerKind').value=details?.kind||'telegram';
+  renderProviderTypeOptions(details?.kind);
+  if(details)$('providerKind').value=details.kind;
   $('providerKind').disabled=Boolean(id);
   $('providerEnabled').checked=details?.enabled??true;
   $('providerMode').value=details?.delivery?.mode||'direct';
@@ -561,7 +624,7 @@ $('sidebarShade').addEventListener('click',closeSidebar);
 $('logoutButton').addEventListener('click',()=>logout('已安全退出账户。'));
 $('loginTab').addEventListener('click',()=>setAuthMode('login'));
 $('registerTab').addEventListener('click',()=>setAuthMode('register'));
-$('refreshButton').addEventListener('click',async()=>{await safeRefresh();showToast('数据已更新。');});
+$('refreshButton').addEventListener('click',async()=>{if(await safeRefresh())showToast('数据已更新。');});
 $('refreshHistoryButton').addEventListener('click',safeRefresh);
 $('addProviderButton').addEventListener('click',()=>openProviderDialog().catch(e=>showToast(friendlyError(e),true)));
 $('providerKind').addEventListener('change',()=>{state.providerDetails=null;chooseProviderKind();});

@@ -27,8 +27,10 @@ pub async fn worker(state: AppState) {
 async fn claim_jobs(state:&AppState)->Result<Vec<Job>> {
     let rows=sqlx::query(
         "WITH selected AS (
-            SELECT d.id FROM deliveries d JOIN providers p ON p.id=d.provider_id
-            WHERE p.enabled=true AND
+            SELECT d.id FROM deliveries d
+            JOIN providers p ON p.id=d.provider_id
+            JOIN provider_catalog c ON c.kind=p.kind
+            WHERE p.enabled=true AND c.enabled=true AND
             ((d.status='pending' AND d.next_attempt_at<=now()) OR (d.status='working' AND d.lease_until<now()))
             ORDER BY d.created_at LIMIT 16 FOR UPDATE OF d SKIP LOCKED
         ) UPDATE deliveries d

@@ -99,23 +99,29 @@ pub async fn update_user(State(state):State<AppState>,headers:HeaderMap,Path(id)
     if caller.id==id && (patch.active==Some(false) || patch.role.as_deref()==Some("user")){
         return Err(ApiError::bad("you cannot deactivate or demote your own administrator account"));
     }
-    if patch.role.as_deref()==Some("user")||patch.active==Some(false){
-        protect_last_admin(&state.pool,id).await?;
-    }
     let hash=patch.password.as_deref().map(security::password_hash).transpose()
         .map_err(|e|ApiError::bad(e.to_string()))?;
+    let mut tx=state.pool.begin().await?;
+    sqlx::query("SELECT id FROM site_settings WHERE id=TRUE FOR UPDATE")
+        .fetch_one(&mut *tx).await?;
+    if patch.role.as_deref()==Some("user")||patch.active==Some(false){
+        protect_last_admin(&mut tx,id).await?;
+    }
     let changed=sqlx::query("UPDATE users SET role=COALESCE($1,role),active=COALESCE($2,active),password_hash=COALESCE($3,password_hash),session_version=session_version+1 WHERE id=$4")
-        .bind(patch.role).bind(patch.active).bind(hash).bind(id).execute(&state.pool).await?;
+        .bind(patch.role).bind(patch.active).bind(hash).bind(id).execute(&mut *tx).await?;
     if changed.rows_affected()==0{return Err(ApiError::not_found());}
     if patch.active==Some(false) {
-        sqlx::query("UPDATE api_keys SET revoked_at=now() WHERE user_id=$1").bind(id).execute(&state.pool).await?;
+        sqlx::query("UPDATE api_keys SET revoked_at=now() WHERE user_id=$1").bind(id).execute(&mut *tx).await?;
     }
+    tx.commit().await?;
     Ok(Json(json!({"id":id,"updated":true})))
 }
-async fn protect_last_admin(pool:&PgPool,id:Uuid)->ApiResult<()>{
-    let row=sqlx::query("SELECT role,active FROM users WHERE id=$1").bind(id).fetch_optional(pool).await?.ok_or_else(ApiError::not_found)?;
+async fn protect_last_admin(tx:&mut sqlx::Transaction<'_,sqlx::Postgres>,id:Uuid)->ApiResult<()>{
+    let row=sqlx::query("SELECT role,active FROM users WHERE id=$1")
+        .bind(id).fetch_optional(&mut **tx).await?.ok_or_else(ApiError::not_found)?;
     if row.get::<String,_>("role")=="admin" && row.get::<bool,_>("active") {
-        let count:i64=sqlx::query_scalar("SELECT count(*) FROM users WHERE role='admin' AND active=true").fetch_one(pool).await?;
+        let count:i64=sqlx::query_scalar("SELECT count(*) FROM users WHERE role='admin' AND active=true")
+            .fetch_one(&mut **tx).await?;
         if count <= 1 {return Err(ApiError::bad("at least one active administrator is required"));}
     }
     Ok(())
@@ -124,9 +130,13 @@ pub async fn delete_user(State(state):State<AppState>,headers:HeaderMap,Path(id)
     let caller=require_user(&state,&headers).await?;
     admin_only(&caller)?;
     if caller.id==id{return Err(ApiError::bad("you cannot remove your own administrator account"));}
-    protect_last_admin(&state.pool,id).await?;
-    let result=sqlx::query("DELETE FROM users WHERE id=$1").bind(id).execute(&state.pool).await?;
+    let mut tx=state.pool.begin().await?;
+    sqlx::query("SELECT id FROM site_settings WHERE id=TRUE FOR UPDATE")
+        .fetch_one(&mut *tx).await?;
+    protect_last_admin(&mut tx,id).await?;
+    let result=sqlx::query("DELETE FROM users WHERE id=$1").bind(id).execute(&mut *tx).await?;
     if result.rows_affected()==0{return Err(ApiError::not_found());}
+    tx.commit().await?;
     Ok(Json(json!({"deleted":true})))
 }
 #[derive(Deserialize)]
@@ -173,7 +183,9 @@ pub fn decrypt_provider(state:&AppState, raw:&str)->ApiResult<ProviderSecrets>{
 }
 pub async fn list_providers(State(state):State<AppState>,headers:HeaderMap)->ApiResult<Json<Vec<Value>>>{
     let user=require_user(&state,&headers).await?;
-    let rows=sqlx::query("SELECT id,name,kind,enabled,encrypted_settings,created_at FROM providers WHERE user_id=$1 ORDER BY created_at DESC")
+    let rows=sqlx::query("SELECT p.id,p.name,p.kind,p.enabled,c.enabled AS available,p.encrypted_settings,p.created_at
+          FROM providers p JOIN provider_catalog c ON c.kind=p.kind
+          WHERE p.user_id=$1 ORDER BY p.created_at DESC")
         .bind(user.id).fetch_all(&state.pool).await?;
     let mut out=Vec::new();
     for r in rows {
@@ -185,7 +197,7 @@ pub async fn list_providers(State(state):State<AppState>,headers:HeaderMap)->Api
             _=>true,
         };
         out.push(json!({"id":r.get::<Uuid,_>("id"),"name":r.get::<String,_>("name"),"kind":kind,
-            "enabled":r.get::<bool,_>("enabled"),"subscribed":subscribed,
+            "enabled":r.get::<bool,_>("enabled"),"available":r.get::<bool,_>("available"),"subscribed":subscribed,
             "delivery":match secret.delivery{DeliveryMode::Direct=>"direct",DeliveryMode::Proxy{..}=>"proxy"},
             "created_at":r.get::<DateTime<Utc>,_>("created_at")}));
     }
@@ -193,6 +205,9 @@ pub async fn list_providers(State(state):State<AppState>,headers:HeaderMap)->Api
 }
 pub async fn create_provider(State(state):State<AppState>,headers:HeaderMap,Json(input):Json<ProviderInput>)->ApiResult<(StatusCode,Json<Value>)>{
     let user=require_user(&state,&headers).await?;
+    if !crate::catalog::is_enabled(&state.pool,&input.kind).await? {
+        return Err(ApiError::bad("this provider type is not enabled by the site administrator"));
+    }
     let sealed=encrypt_provider(&state,&input)?;
     let id=Uuid::new_v4();
     sqlx::query("INSERT INTO providers(id,user_id,name,kind,encrypted_settings,enabled) VALUES($1,$2,$3,$4,$5,$6)")
@@ -203,9 +218,13 @@ pub async fn create_provider(State(state):State<AppState>,headers:HeaderMap,Json
 }
 pub async fn update_provider(State(state):State<AppState>,headers:HeaderMap,Path(id):Path<Uuid>,Json(input):Json<ProviderInput>)->ApiResult<Json<Value>>{
     let user=require_user(&state,&headers).await?;
+    let current:Option<String>=sqlx::query_scalar("SELECT kind FROM providers WHERE id=$1 AND user_id=$2")
+        .bind(id).bind(user.id).fetch_optional(&state.pool).await?;
+    let Some(kind)=current else{return Err(ApiError::not_found());};
+    if kind!=input.kind{return Err(ApiError::bad("provider type cannot be changed; create a new channel"));}
     let sealed=encrypt_provider(&state,&input)?;
-    let rows=sqlx::query("UPDATE providers SET name=$1,kind=$2,encrypted_settings=$3,enabled=$4 WHERE id=$5 AND user_id=$6")
-        .bind(input.name.trim()).bind(input.kind).bind(sealed).bind(input.enabled).bind(id).bind(user.id)
+    let rows=sqlx::query("UPDATE providers SET name=$1,encrypted_settings=$2,enabled=$3 WHERE id=$4 AND user_id=$5")
+        .bind(input.name.trim()).bind(sealed).bind(input.enabled).bind(id).bind(user.id)
         .execute(&state.pool).await?.rows_affected();
     if rows==0{return Err(ApiError::not_found());}
     Ok(Json(json!({"updated":true})))
@@ -258,7 +277,8 @@ pub async fn enqueue(state:&AppState,user_id:Uuid,req:SendRequest,idempotency:Op
     req.validate()?;
     if let Some(k)=idempotency {if k.is_empty() || k.len()>128 {return Err(ApiError::bad("idempotency-key must be 1 to 128 bytes"));}}
     let mut tx=state.pool.begin().await?;
-    let rows=sqlx::query("SELECT id,name FROM providers WHERE user_id=$1 AND enabled=true ORDER BY created_at")
+    let rows=sqlx::query("SELECT p.id,p.name FROM providers p JOIN provider_catalog c ON c.kind=p.kind
+          WHERE p.user_id=$1 AND p.enabled=true AND c.enabled=true ORDER BY p.created_at")
         .bind(user_id).fetch_all(&mut *tx).await?;
     let mut ids:Vec<(Uuid,String)>=rows.into_iter().map(|r|(r.get("id"),r.get("name"))).collect();
     if let Some(selected)=req.provider_ids {

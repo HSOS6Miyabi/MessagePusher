@@ -198,6 +198,13 @@
           <div><article class="side-note"><div class="side-note-icon"><svg class="icon"><use href="#i-shield"></use></svg></div><h3>账户与注册安全</h3><p>默认关闭公开注册。开启后，注册账户自动获得普通用户权限，且每小时最多允许注册 60 个账户。管理员可以随时停用账户、调整权限或关闭注册。</p></article>
             <article class="side-note muted-note"><h3>公开信息</h3><p>站点名称、简介、公告和注册开关会显示在登录页面。推送平台密钥和账户信息只向获得相应权限的用户提供。</p></article></div>
         </div>
+        <article class="panel site-catalog-panel">
+          <div class="panel-head">
+            <div><h2>可用的 Provider 类型</h2><p>管理员选择向本站用户提供哪些推送平台。每位用户自行管理自己的接收地址、访问密钥和发送方式。</p></div>
+          </div>
+          <div id="providerCatalogList" class="provider-catalog-list"></div>
+          <p class="catalog-note">关闭某个 Provider 类型后，现有用户配置仍会保留；该类型将暂停接受新的发送任务，等待中的任务会在重新启用后继续处理。</p>
+        </article>
       </section>
 
       <section class="view" id="view-account" hidden>

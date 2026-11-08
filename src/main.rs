@@ -1,4 +1,5 @@
 mod api;
+mod catalog;
 mod compat;
 mod delivery;
 mod error;
@@ -65,6 +66,9 @@ fn create_router(state: AppState) -> Router {
         .route("/v1/users/{id}", patch(api::update_user).delete(api::delete_user))
         .route("/v1/keys", get(api::list_keys).post(api::create_key))
         .route("/v1/keys/{id}", delete(api::delete_key))
+        .route("/v1/provider-catalog", get(catalog::list_public))
+        .route("/v1/admin/provider-catalog", get(catalog::list_admin))
+        .route("/v1/admin/provider-catalog/{kind}", patch(catalog::set_availability))
         .route("/v1/providers", get(api::list_providers).post(api::create_provider))
         .route("/v1/providers/{id}", get(api::provider_detail).put(api::update_provider).patch(api::patch_provider).delete(api::delete_provider))
         .route("/v1/send", post(api::send_json))
