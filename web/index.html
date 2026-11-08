@@ -231,8 +231,8 @@
     <div id="providerRelayFields" hidden><div class="field"><label for="providerRelayUrl">代理 HTTPS 地址</label><input id="providerRelayUrl" type="url" placeholder="https://your-relay.example.com/"></div><div class="field"><label for="providerRelaySecret">代理共享密钥</label><input id="providerRelaySecret" type="password" autocomplete="new-password" placeholder="至少 24 个字符"></div></div>
     <label class="choice modal-choice"><input type="checkbox" id="providerEnabled" checked><span>启用此推送渠道</span></label>
     <p id="providerHelp" class="hint"></p>
-    <div class="dialog-actions"><button type="button" class="btn ghost" data-close="providerDialog">取消</button><button type="submit" class="btn primary">保存渠道</button></div>
   </form>
+  <div class="dialog-actions"><button type="button" class="btn ghost" data-close="providerDialog">取消</button><button type="submit" form="providerForm" class="btn primary">保存渠道</button></div>
 </dialog>
 
 <dialog id="keyDialog" class="modal compact-modal">
@@ -240,8 +240,8 @@
   <form id="keyForm" class="modal-body">
     <div class="field"><label for="keyName">密钥名称</label><input id="keyName" maxlength="80" required placeholder="例如：服务器监控"></div>
     <div class="field"><label for="keyFormat">密钥格式</label><select id="keyFormat"><option value="standard">标准 API（mpk_）</option><option value="serverchan">Server酱兼容（SCT）</option></select><p class="hint">两种密钥均可调用所有已支持的发送 API。</p></div>
-    <div class="dialog-actions"><button type="button" class="btn ghost" data-close="keyDialog">取消</button><button type="submit" class="btn primary">创建密钥</button></div>
   </form>
+  <div class="dialog-actions"><button type="button" class="btn ghost" data-close="keyDialog">取消</button><button type="submit" form="keyForm" class="btn primary">创建密钥</button></div>
 </dialog>
 
 <dialog id="userDialog" class="modal compact-modal">
@@ -251,8 +251,8 @@
     <div class="field"><label for="manageRole">权限</label><select id="manageRole"><option value="user">普通用户</option><option value="admin">管理员</option></select></div>
     <div class="field"><label for="managePassword">账户密码</label><input id="managePassword" type="password" autocomplete="new-password" minlength="12" placeholder="至少 12 个字符"><p class="hint" id="managePasswordHint">创建账户时必须填写密码。</p></div>
     <label class="choice modal-choice" id="manageActiveRow" hidden><input id="manageActive" type="checkbox" checked><span>启用此账户</span></label>
-    <div class="dialog-actions"><button type="button" class="btn ghost" data-close="userDialog">取消</button><button type="submit" class="btn primary">保存账户</button></div>
   </form>
+  <div class="dialog-actions"><button type="button" class="btn ghost" data-close="userDialog">取消</button><button type="submit" form="userForm" class="btn primary">保存账户</button></div>
 </dialog>
 
 <dialog id="linkDialog" class="modal compact-modal">

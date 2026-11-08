@@ -71,8 +71,10 @@ function setText(id,value){$(id).textContent=String(value ?? '');}
 function showToast(message,error=false) {
   const item=node('div',error?'toast error':'toast');
   item.append(svg(error?'i-info':'i-check'),node('span','',message));
-  $('toastArea').append(item);
-  setTimeout(()=>item.remove(),5500);
+  const container=$('toastArea');
+  while(container.children.length>=2)container.firstElementChild.remove();
+  container.append(item);
+  setTimeout(()=>item.remove(),error?5200:3500);
 }
 function friendlyError(error){
   const text=String(error?.message || error);

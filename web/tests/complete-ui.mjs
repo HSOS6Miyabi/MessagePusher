@@ -272,6 +272,15 @@ const expectNoOverflow = async (page, name) => {
   const size = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth, viewport: window.innerWidth
   }));
+  if (size.scroll > size.viewport + 2) {
+    const overflowing = await page.evaluate(() => [...document.querySelectorAll('body *')].map(el => {
+      const bounds = el.getBoundingClientRect();
+      return { tag: el.tagName, id: el.id, className: typeof el.className === 'string' ? el.className.slice(0,90) : '',
+        right: Math.round(bounds.right), width: Math.round(bounds.width), left: Math.round(bounds.left) };
+    }).filter(item => item.right > window.innerWidth + 2 && item.width > 0 && item.left >= -1).slice(0,20));
+    console.log('RESPONSIVE OVERFLOW', name, JSON.stringify({ size, overflowing }));
+    await screenshot(page, '99-overflow-' + name.replaceAll(' ', '-'));
+  }
   ok('No horizontal overflow: ' + name, size.scroll <= size.viewport + 2);
 };
 const gotoView = async (page, view, mobile = false) => {
@@ -322,7 +331,7 @@ try {
   await desktop.locator('#field-bot_username').fill('example_notify_bot');
   await desktop.locator('#field-webhook_secret').fill('demo_webhook_secret_12345');
   await desktop.locator('#field-chat_id').fill('123456');
-  await desktop.locator('#providerForm button[type="submit"]').click();
+  await desktop.locator('#providerDialog button[type="submit"]').click();
   await desktop.locator('#providerDialog').waitFor({ state: 'hidden' });
   await desktop.locator('#providerCards .provider-card').waitFor();
   ok('Telegram created', channels.length === 1);
@@ -333,7 +342,7 @@ try {
   ok('Saved secret concealed', await desktop.locator('#field-bot_token').inputValue() === '');
   await desktop.locator('#providerName').fill('团队 Telegram（已更新）');
   await desktop.locator('#field-chat_id').fill('654321');
-  await desktop.locator('#providerForm button[type="submit"]').click();
+  await desktop.locator('#providerDialog button[type="submit"]').click();
   await desktop.locator('#providerDialog').waitFor({ state: 'hidden' });
   ok('Edit keeps saved token', channels[0].settings.bot_token === '123456:TEST_TOKEN');
   ok('Edit updates chat ID', channels[0].settings.chat_id === '654321');
@@ -362,7 +371,7 @@ try {
   await desktop.locator('#field-from').fill('sender@example.com');
   await desktop.locator('#field-to').fill('one@example.com, two@example.com');
   await screenshot(desktop, '06-smtp-editor-desktop');
-  await desktop.locator('#providerForm button[type="submit"]').click();
+  await desktop.locator('#providerDialog button[type="submit"]').click();
   await desktop.locator('#providerDialog').waitFor({ state: 'hidden' });
   ok('SMTP recipients parsed', channels.find(ch => ch.kind === 'email_smtp')?.settings.to.length === 2);
 
@@ -371,7 +380,7 @@ try {
   await desktop.locator('#addKeyButton').click();
   await screenshot(desktop, '08-key-dialog-desktop');
   await desktop.locator('#keyName').fill('服务器监控');
-  await desktop.locator('#keyForm button[type="submit"]').click();
+  await desktop.locator('#keyDialog button[type="submit"]').click();
   await desktop.locator('#keyDialog').waitFor({ state: 'hidden' });
   ok('Key created', keys.length === 1);
   ok('Key revealed once', await desktop.locator('#keyReveal').isVisible());
@@ -403,14 +412,14 @@ try {
   await desktop.locator('#manageUsername').fill('operational_user');
   await desktop.locator('#managePassword').fill('test-user-password-123');
   await screenshot(desktop, '15-user-editor-desktop');
-  await desktop.locator('#userForm button[type="submit"]').click();
+  await desktop.locator('#userDialog button[type="submit"]').click();
   await desktop.locator('#userDialog').waitFor({ state: 'hidden' });
   ok('Administrator creates user', users.some(u => u.username === 'operational_user'));
   const userRow = desktop.locator('#usersList .data-row').filter({ hasText: 'operational_user' });
   await userRow.locator('button:has-text("编辑")').click();
   await desktop.locator('#manageRole').selectOption('admin');
   await desktop.locator('#managePassword').fill('test-new-password-456');
-  await desktop.locator('#userForm button[type="submit"]').click();
+  await desktop.locator('#userDialog button[type="submit"]').click();
   await desktop.locator('#userDialog').waitFor({ state: 'hidden' });
   ok('Administrator edits permissions', users.find(u => u.username === 'operational_user')?.role === 'admin');
   await userRow.locator('button:has-text("停用")').click();
