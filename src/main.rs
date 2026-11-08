@@ -8,7 +8,7 @@ mod subscribe;
 
 use anyhow::{Context, Result};
 use axum::{extract::DefaultBodyLimit, routing::{get, post, delete, put, patch}, Router, response::Html};
-use sqlx::{PgPool, postgres::PgPoolOptions, Row};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{env, sync::Arc};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
@@ -90,7 +90,6 @@ async fn bootstrap_admin(pool: &PgPool) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     #[test]
     fn router_constructs() {
         let _ = include_str!("../web/index.html");

@@ -2,7 +2,7 @@ use crate::{api, models::{Attachment, DeliveryMode, ProviderSecrets, RelayBatch,
 use anyhow::{anyhow, bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use futures::future::join_all;
-use lettre::{message::{Attachment as EmailAttachment, ContentType, Mailbox, MultiPart, SinglePart}, transport::smtp::authentication::Credentials, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
+use lettre::{message::{header::ContentType, Attachment as EmailAttachment, Mailbox, MultiPart, SinglePart}, transport::smtp::authentication::Credentials, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use reqwest::multipart::{Form, Part};
 use serde_json::{json, Value};
 use sqlx::Row;

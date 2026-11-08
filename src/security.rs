@@ -1,7 +1,7 @@
 use aes_gcm::{aead::{Aead, KeyInit}, Aes256Gcm, Nonce};
 use anyhow::{bail, Context, Result};
 use argon2::{password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString}, Argon2};
-use base64::{engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD}, Engine as _};
+use base64::{engine::general_purpose::{STANDARD}, Engine as _};
 use chrono::Utc;
 use hmac::{Hmac, Mac};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -51,7 +51,7 @@ pub fn random_secret(prefix: &str) -> String {
 pub fn password_hash(password: &str) -> Result<String> {
     if password.len() < 12 || password.len() > 256 { bail!("Password length must be between 12 and 256 characters"); }
     let salt = SaltString::generate(&mut OsRng);
-    Ok(Argon2::default().hash_password(password.as_bytes(), &salt)?.to_string())
+    Ok(Argon2::default().hash_password(password.as_bytes(), &salt).map_err(|e| anyhow::anyhow!(e.to_string()))?.to_string())
 }
 pub fn password_valid(encoded: &str, password: &str) -> bool {
     PasswordHash::new(encoded).ok().is_some_and(|hash| Argon2::default().verify_password(password.as_bytes(), &hash).is_ok())
