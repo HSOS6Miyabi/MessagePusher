@@ -96,6 +96,15 @@ impl ProviderInput {
             let exists = self.settings.get(*k).is_some_and(|v| v.as_str().is_some_and(|s| !s.is_empty()) || v.as_i64().is_some() || v.as_array().is_some_and(|a| !a.is_empty()));
             if !exists { return Err(ApiError::bad(format!("missing provider setting: {}",k))); }
         }
+        if self.kind == "telegram" {
+            if let Some(raw) = self.settings.get("webhook_secret") {
+                let value = raw.as_str().ok_or_else(|| ApiError::bad("webhook_secret must be text"))?;
+                if !value.is_empty() && (value.len() < 16 || value.len() > 256
+                    || !value.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')) {
+                    return Err(ApiError::bad("webhook_secret must be 16 to 256 letters, numbers, underscores or hyphens"));
+                }
+            }
+        }
         if let DeliveryMode::Proxy { url, secret } = &self.delivery {
             if self.kind == "email_smtp" { return Err(ApiError::bad("SMTP is not available in the FaaS relay; use email_resend for proxied email")); }
             let parsed = url::Url::parse(url).map_err(|_| ApiError::bad("invalid relay URL"))?;
@@ -138,6 +147,18 @@ mod tests {
         assert!(s.validate().is_err());
         s.attachments[0].filename="report.txt".into();
         assert!(s.validate().is_ok());
+    }
+    #[test]
+    fn telegram_webhook_secret_validation() {
+        let valid = ProviderInput{name:"Telegram".into(),kind:"telegram".into(),
+            settings:serde_json::json!({"bot_token":"123:abc", "webhook_secret":"secure_example-2026_123"}),
+            delivery:DeliveryMode::Direct,enabled:true};
+        assert!(valid.validate().is_ok());
+        let mut invalid = valid;
+        invalid.settings["webhook_secret"] = serde_json::json!("base64/secret=invalid");
+        assert!(invalid.validate().is_err());
+        invalid.settings["webhook_secret"] = serde_json::json!("short");
+        assert!(invalid.validate().is_err());
     }
     #[test]
     fn reject_insecure_relay() {

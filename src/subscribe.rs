@@ -25,7 +25,8 @@ pub async fn telegram_subscribe(State(state):State<AppState>,headers:HeaderMap,P
     let provider=own_provider(&state,&headers,id,"telegram").await?;
     let username=provider.settings.get("bot_username").and_then(Value::as_str)
         .ok_or_else(||ApiError::bad("set bot_username in this Telegram provider"))?;
-    if username.trim_start_matches('@').chars().any(|c|!c.is_ascii_alphanumeric() && c!='_'){
+    let clean = username.trim_start_matches('@');
+    if clean.len() < 5 || clean.len() > 32 || clean.chars().any(|c|!c.is_ascii_alphanumeric() && c!='_'){
         return Err(ApiError::bad("invalid Telegram bot username"));
     }
     let code=create_subscription(&state,&headers,id,"telegram").await?;
@@ -35,13 +36,15 @@ pub async fn telegram_set_webhook(State(state):State<AppState>,headers:HeaderMap
     let provider=own_provider(&state,&headers,id,"telegram").await?;
     if !state.public_url.starts_with("https://"){return Err(ApiError::bad("PUBLIC_BASE_URL must be a publicly accessible HTTPS address"));}
     let token=provider.settings.get("bot_token").and_then(Value::as_str).ok_or_else(||ApiError::bad("missing bot_token"))?;
-    let secret=provider.settings.get("webhook_secret").and_then(Value::as_str).filter(|s|s.len()>=16)
-        .ok_or_else(||ApiError::bad("set webhook_secret (at least 16 characters) in the provider"))?;
+    let secret=provider.settings.get("webhook_secret").and_then(Value::as_str)
+        .filter(|s| s.len()>=16 && s.len()<=256
+            && s.bytes().all(|c|c.is_ascii_alphanumeric() || c==b'_' || c==b'-'))
+        .ok_or_else(||ApiError::bad("set webhook_secret to 16–256 letters, numbers, underscores or hyphens"))?;
     let url=format!("{}/hooks/telegram/{}",state.public_url,id);
     let result=match provider.delivery {
         DeliveryMode::Direct=>{
             let response=state.http.post(format!("https://api.telegram.org/bot{}/setWebhook",token))
-                .json(&json!({"url":url,"secret_token":secret})).send().await.map_err(ApiError::internal)?;
+                .json(&json!({"url":url,"secret_token":secret,"allowed_updates":["message"]})).send().await.map_err(ApiError::internal)?;
             let value:Value=response.json().await.map_err(ApiError::internal)?;
             if value.get("ok").and_then(Value::as_bool)!=Some(true){return Err(ApiError::bad("Telegram rejected the webhook configuration"));}
             true

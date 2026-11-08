@@ -261,7 +261,11 @@ pub async fn send_direct(state:&AppState,item:&RelayItem)->Result<()>{
 async fn send_telegram(state:&AppState,item:&RelayItem)->Result<()>{
     let bot=setting(&item.settings,"bot_token")?;
     let chat=chat_id(&item.settings)?;
-    if bot.contains('/') || bot.contains('?') || bot.contains('#'){bail!("invalid Telegram bot token");}
+    if bot.split_once(':').is_none_or(|(id,secret)| {
+        id.is_empty() || !id.bytes().all(|c|c.is_ascii_digit())
+            || secret.is_empty()
+            || !secret.bytes().all(|c|c.is_ascii_alphanumeric() || c==b'_' || c==b'-')
+    }) { bail!("invalid Telegram bot token"); }
     let text=if item.title.is_empty(){item.body.clone()}else{format!("{}\n\n{}",item.title,item.body)};
     if !text.is_empty() {
         for chunk in split_chars(&text,4000) {
@@ -281,9 +285,14 @@ async fn send_telegram(state:&AppState,item:&RelayItem)->Result<()>{
 fn split_chars(input:&str,maximum:usize)->Vec<String>{
     let mut parts=Vec::new();
     let mut current=String::new();
+    let mut count=0;
     for ch in input.chars() {
-        if current.chars().count()>=maximum {parts.push(std::mem::take(&mut current));}
+        if count>=maximum {
+            parts.push(std::mem::take(&mut current));
+            count=0;
+        }
         current.push(ch);
+        count+=1;
     }
     if !current.is_empty(){parts.push(current);}
     parts

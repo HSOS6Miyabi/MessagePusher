@@ -86,3 +86,29 @@ test('one provider failure does not block others', async () => {
     assert.deepEqual(result.body.results.map(r => r.ok), [false, true]);
   } finally { globalThis.fetch = before; }
 });
+
+test('Telegram webhook configuration registers message updates with a valid secret', async () => {
+  const original = globalThis.fetch;
+  let captured;
+  globalThis.fetch = async (url, options) => {
+    captured = { url: String(url), body: JSON.parse(options.body) };
+    return Response.json({ ok: true, result: true });
+  };
+  try {
+    const result = await request([item('webhook', 'telegram_webhook_setup',
+      { bot_token: '123:abc_DEF', webhook_secret: 'secure_webhook_12345678' })].map(x => ({
+      ...x, title: 'https://push.example.com/hooks/telegram/test'
+    })));
+    assert.equal(result.body.results[0].ok, true);
+    assert.ok(captured.url.endsWith('/setWebhook'));
+    assert.deepEqual(captured.body.allowed_updates, ['message']);
+    assert.equal(captured.body.secret_token, 'secure_webhook_12345678');
+  } finally { globalThis.fetch = original; }
+});
+test('Telegram webhook setup rejects invalid secret before making network requests', async () => {
+  const result = await request([{...item('webhook', 'telegram_webhook_setup',
+    {bot_token:'123:abc_DEF',webhook_secret:'bad/value'}),
+    title:'https://push.example.com/hooks/telegram/test'}]);
+  assert.equal(result.body.results[0].ok, false);
+  assert.match(result.body.results[0].error,/secret/i);
+});

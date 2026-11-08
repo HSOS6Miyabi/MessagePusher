@@ -102,9 +102,12 @@ async function telegramWebhook(item, signal) {
   const url = new URL(item.title);
   if (url.protocol !== 'https:') throw new Error('Telegram webhook must be HTTPS');
   const secret = getStr(item.settings, 'webhook_secret');
+  if (secret.length < 16 || secret.length > 256 || !/^[A-Za-z0-9_-]+$/.test(secret)) {
+    throw new Error('Invalid Telegram webhook secret');
+  }
   await checked('https://api.telegram.org/bot' + token + '/setWebhook', {
     method: 'POST', signal, headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ url: url.toString(), secret_token: secret })
+    body: JSON.stringify({ url: url.toString(), secret_token: secret, allowed_updates: ['message'] })
   });
 }
 function wecomKey(settings) { return getStr(settings, 'webhook_key'); }
