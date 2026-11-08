@@ -527,6 +527,7 @@ try {
     await page.close();
   }
 
+  console.log('BROWSER RUNTIME ISSUE DETAILS', JSON.stringify(issues));
   ok('No browser runtime errors', issues.length === 0);
   const report = {
     checks: cases,
