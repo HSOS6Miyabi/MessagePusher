@@ -93,3 +93,5 @@
 建议先访问代理的 `/healthz`，检查是否返回 `{"ok":true,"service":"messagepusher-relay"}`。它无需授权即可访问；发送接口需要有效签名。
 
 主程序保存的平台密码、Token 和代理密钥均以加密形式保存在 PostgreSQL。请把代理 URL 和代理密钥当作敏感设置管理，不要使用不可信的代理服务。
+
+用户从创建渠道到完成发送的具体操作，请阅读 [使用手册](guide.md)。Telegram 私聊订阅和 Webhook 说明见 [Telegram 使用说明](telegram.md)。

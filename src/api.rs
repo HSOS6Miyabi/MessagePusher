@@ -113,9 +113,6 @@ pub async fn update_user(State(state):State<AppState>,headers:HeaderMap,Path(id)
     if patch.active==Some(false) {
         sqlx::query("UPDATE api_keys SET revoked_at=now() WHERE user_id=$1").bind(id).execute(&mut *tx).await?;
     }
-    if enabled {
-        sqlx::query("NOTIFY messagepusher_delivery").execute(&mut *tx).await?;
-    }
     tx.commit().await?;
     Ok(Json(json!({"id":id,"updated":true})))
 }
@@ -449,6 +446,9 @@ pub async fn patch_provider(
         .map_err(|err|if err.as_database_error().is_some_and(|db|db.is_unique_violation()){
             ApiError::bad("provider name already exists")
         }else{ApiError::internal(err)})?;
+    if enabled {
+        sqlx::query("NOTIFY messagepusher_delivery").execute(&mut *tx).await?;
+    }
     tx.commit().await?;
     Ok(Json(json!({"id":id,"updated":true})))
 }

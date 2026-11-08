@@ -10,7 +10,7 @@ MessagePusher 是一个可以自行部署的消息推送服务。你的程序只
 - 每个用户可以在“我的账户”中修改登录密码。管理员可以修改站点名称、简介和公告。
 - 管理员在“站点设置”中选择向用户开放哪些 Provider 类型。各用户自行创建、编辑和删除个人渠道，并自行填写 Telegram Bot Token、SMTP 账户、企业微信凭据以及代理设置。管理员只管理平台类型的开放状态，不需要代替用户配置渠道。
 - 每位用户可以配置多个同类型或不同类型的平台。所有发送都由后台任务并行执行。
-- API 在消息加入 PostgreSQL 队列后立即返回消息编号。暂时发送失败时最多尝试五次，每个平台的结果单独记录。
+- API 在消息加入 PostgreSQL 队列后立即返回消息编号。工作进程通过 `LISTEN/NOTIFY` 在新任务提交后收到通知，并根据数据库中的重试时间安排后续发送。消息持久化在 PostgreSQL，每个平台的发送结果单独记录，暂时失败时最多尝试五次。
 - 支持最多五个附件，附件总大小不超过 2 MiB。邮件附件以普通邮件附件的形式发送；Telegram 和企业微信会显示单独的文件消息。
 - 同一代理地址和共享密钥下的多个平台，可以在一次请求中并行发送。代理不需要数据库，也不保存用户和消息。
 - 支持 Server酱、PushPlus、Bark、ntfy 和 Gotify 的常见调用方式。第三方程序通常只需要替换调用地址和发送密钥。
@@ -144,6 +144,10 @@ GitHub Actions 在提交到 `main` 时执行 Rust 测试、代理测试及数据
 
 推送版本标签（例如 `v0.1.0`）时，会生成相应版本的 Release。另有工作流编译 Linux AMD64/ARM64 Docker 镜像，推送到 GitHub Container Registry。
 
-- [API 说明](docs/api.md)
+- [完整使用手册](docs/guide.md)
+- [API 接入指南](docs/integration.md)
+- [Telegram 使用说明](docs/telegram.md)
+- [PostgreSQL 消息队列说明](docs/queue.md)
+- [API 接口列表](docs/api.md)
 - [各平台配置](docs/providers.md)
 - [详细部署说明](docs/deploy.md)

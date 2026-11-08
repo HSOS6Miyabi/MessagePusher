@@ -82,6 +82,18 @@ jobs:
             -H "Authorization: Bearer $SENDKEY" -H 'Content-Type: application/json' \
             -d '{"title":"File test","body":"Hello","attachments":[{"filename":"example.txt","content_type":"text/plain","data_base64":"aGVsbG8="}]}' > /tmp/sent.json
           python3 -c 'import json;assert json.load(open("/tmp/sent.json"))["status"] == "queued"'
+          EVENT_ID=$(python3 -c 'import json;print(json.load(open("/tmp/sent.json"))["id"])')
+          PICKED=0
+          for attempt in $(seq 1 50); do
+            if curl -fsS "http://127.0.0.1:8080/v1/events/$EVENT_ID" \
+              -H "Authorization: Bearer $SESSION" \
+              | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["deliveries"] and d["deliveries"][0]["attempts"] >= 1 else 1)'; then
+              PICKED=1
+              break
+            fi
+            sleep 0.1
+          done
+          test "$PICKED" = 1
           curl -fsS "http://127.0.0.1:8080/v1/events" -H "Authorization: Bearer $SESSION" \
             | python3 -c 'import json,sys; assert len(json.load(sys.stdin)) == 2'
           curl -fsS http://127.0.0.1:8080/assets/styles.css | grep -q 'stats-grid'
