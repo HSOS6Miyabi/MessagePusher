@@ -209,6 +209,7 @@ button,input,select,textarea{outline-offset:3px}
 .file-drop small{font-size:10px;font-weight:500;color:#a0adbb}
 .file-drop:hover{background:#eff9f6}
 .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.field input.visually-hidden[type="file"]{position:absolute;width:1px;height:1px;min-height:0;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .file-selection{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .file-pill{border-radius:8px;background:#eff5f9;padding:5px 9px;font-size:10px;color:#4d677c;max-width:100%;overflow-wrap:anywhere}
 .target-options{padding:13px;border:1px solid #e5ecef;background:#f9fbfc;border-radius:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}

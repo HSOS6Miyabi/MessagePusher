@@ -476,7 +476,7 @@ function renderProviderFields(kind,details){
   const schema=channels[kind];
   if(!schema)return;
   for(const [key,labelText,type,required,options] of schema.fields){
-    const field=node('div','field '+(key==='to'||key==='host'||key==='bot_token'||key==='webhook_key'?'wide-field':''));
+    const field=node('div','field '+(key==='to'||key==='from'||key==='host'||key==='bot_token'||key==='webhook_key'?'wide-field':''));
     const label=node('label','',labelText);label.htmlFor='field-'+key;
     let control;
     if(type==='select'){
