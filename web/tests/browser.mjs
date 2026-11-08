@@ -154,7 +154,7 @@ try{
   await desktop.locator('#providerName').fill('我的 Telegram');
   await desktop.locator('#field-bot_token').fill('123456:TEST');
   await desktop.locator('#field-chat_id').fill('12345');
-  await desktop.locator('#providerForm button[type=submit]').click();
+  await desktop.locator('#providerDialog button[type=submit]').click();
   await desktop.locator('#providerCards .provider-card').waitFor();
   assert.equal(await desktop.locator('#providerCards .provider-card').count(),1);
   await desktop.screenshot({path:path.join(captures,'providers-desktop.png'),fullPage:true});
