@@ -67,6 +67,7 @@ try {
   await member.locator('#field-to').fill('receiver@example.com');
   await member.locator('#providerDialog button[type=submit]').click();
   await member.locator('#providerDialog').waitFor({ state:'hidden' });
+  await member.locator('#providerCards .provider-card').waitFor({ state:'visible' });
   ensure((await member.locator('#providerCards').textContent()).includes('独立测试邮箱'), 'Personal channel saved');
   await screenshot(member, '02-live-personal-channel');
 
