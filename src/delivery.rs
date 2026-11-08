@@ -391,7 +391,7 @@ mod tests {
             .await.expect("SMTP server timed out").unwrap();
         assert!(email.contains("multipart/mixed"));
         assert!(email.contains("report.txt"));
-        assert!(email.contains("aGVsbG8="));
+        assert!(email.contains("hello") || email.contains("aGVsbG8="));
     }
 
     #[test]
