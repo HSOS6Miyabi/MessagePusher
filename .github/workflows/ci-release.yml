@@ -135,6 +135,28 @@ jobs:
             -H "Authorization: Bearer $SESSION" \
             | python3 -c 'import json,sys; d=json.load(sys.stdin);assert d["enabled"]==False and d["name"]=="CI SMTP renamed"'
 
+
+  browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install headless browser
+        run: |
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Verify desktop and mobile interface
+        run: node web/tests/browser.mjs
+      - name: Save interface screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interface-preview
+          path: web/screenshots/*.png
+          if-no-files-found: warn
+
   build:
     needs: test
     strategy:
@@ -201,7 +223,7 @@ jobs:
 
   release:
     if: github.event_name != 'pull_request'
-    needs: [test, build]
+    needs: [test, browser, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
