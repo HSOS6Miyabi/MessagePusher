@@ -267,7 +267,12 @@ const issues = [];
 let cases = 0;
 let browser;
 const ok = (label, condition = true) => { assert(condition, label); cases++; };
-const screenshot = async (page, name) => page.screenshot({ path: path.join(shots, name + '.png'), fullPage: true, animations: 'disabled' });
+const screenshot = async (page, name) => {
+  // Preserve the page layout without short-lived operation notifications
+  // covering the controls being reviewed.
+  await page.evaluate(() => document.getElementById('toastArea')?.replaceChildren());
+  return page.screenshot({ path: path.join(shots, name + '.png'), fullPage: true, animations: 'disabled' });
+};
 const expectNoOverflow = async (page, name) => {
   const size = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth, viewport: window.innerWidth
