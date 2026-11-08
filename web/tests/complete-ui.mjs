@@ -40,7 +40,7 @@ const auth = request => {
   if (header.startsWith('Bearer member-session-')) {
     return users.find(user => user.id === header.slice('Bearer member-session-'.length));
   }
-  if (header.startsWith('Bearer mpk_test_')) return users.find(user => user.id === keys.find(key => key.secret === header.slice(7))?.owner);
+  if (header.startsWith('Bearer ')) return users.find(user => user.id === keys.find(key => key.secret === header.slice(7))?.owner);
   return null;
 };
 const response = (res, code, body) => {
@@ -540,6 +540,7 @@ try {
   ok('Registration enabled', await publicPage.locator('#registerTab').isVisible());
   await publicPage.locator('#registerTab').click();
   await screenshot(publicPage, '19-registration-desktop');
+  await publicPage.locator('#registerUsername').fill('registration_draft');
   await publicPage.locator('#registerPassword').fill('register-password-123');
   await publicPage.locator('#registerConfirm').fill('mismatched-password');
   await publicPage.locator('#registerForm button[type="submit"]').click();
