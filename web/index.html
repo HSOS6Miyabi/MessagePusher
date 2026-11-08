@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>MessagePusher 消息推送管理</title>
+<style>
+:root{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#172235;background:#f5f7fa}
+*{box-sizing:border-box}body{margin:0;min-height:100vh}header{background:#152b47;color:white;padding:20px max(24px,calc((100vw - 1120px)/2))}
+header h1{font-size:24px;margin:0 0 5px}header p{font-size:13px;color:#cbd8e8;margin:0}
+main{max-width:1120px;margin:26px auto;padding:0 20px 40px}
+section{background:white;border:1px solid #e2e7ec;border-radius:12px;padding:22px;margin:0 0 20px;box-shadow:0 2px 10px #12253b0a}
+h2{font-size:18px;margin:0 0 16px}h3{font-size:15px;margin:18px 0 8px}
+label{display:block;font-size:13px;color:#425269;margin:12px 0 5px;font-weight:600}
+input,textarea,select{font:inherit;padding:9px 11px;border:1px solid #bcc9d7;border-radius:7px;width:100%;background:#fff;color:#172235}
+textarea{min-height:100px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;resize:vertical}
+button{padding:9px 15px;border:0;border-radius:7px;background:#235c9a;color:white;font-weight:600;cursor:pointer}
+button:hover{background:#174a7d}button.secondary{background:#e9eef4;color:#203b5c}
+button.danger{background:#a53636}button:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.columns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+small,.hint{color:#64758b;font-size:13px;line-height:1.6}
+ul{margin:8px 0 0;padding:0;list-style:none}li{border-top:1px solid #e9edf2;padding:12px 0;display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+li:first-child{border-top:0}.name{font-weight:650}.meta{font-size:12px;color:#667789;margin-top:4px}
+#notice{display:none;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #e0d5b7;background:#fffaf0;padding:12px;border-radius:8px;margin-bottom:18px}
+pre{white-space:pre-wrap;word-break:break-word;background:#f3f6f9;padding:12px;border-radius:7px;font-size:12px;max-height:300px;overflow:auto}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+#mainPanel,#adminSection{display:none}#loginSection{max-width:480px;margin:15vh auto}
+#reveal{display:none;padding:12px;margin:12px 0;background:#f0f6ff;border:1px solid #c6d8f2;border-radius:8px}
+#reveal input{font-family:monospace}.top{display:flex;justify-content:space-between;align-items:center;gap:20px}
+@media(max-width:760px){.columns,.row{grid-template-columns:1fr}li{align-items:flex-start}.top{align-items:flex-start;flex-direction:column}header{padding:18px}}
+</style>
+</head>
+<body>
+<header><h1>MessagePusher</h1><p>统一管理邮件、Telegram、企业微信及消息代理</p></header>
+<main>
+<div id="notice" role="alert"></div>
+<section id="loginSection">
+<h2>登录管理平台</h2>
+<form id="loginForm">
+<label for="username">用户名</label><input id="username" autocomplete="username" required>
+<label for="password">密码</label><input id="password" type="password" autocomplete="current-password" required>
+<p><button type="submit">登录</button></p>
+</form>
+<p class="hint">首次使用时，管理员账号由服务器的 ADMIN_USERNAME 和 ADMIN_PASSWORD 环境变量创建。</p>
+</section>
+<div id="mainPanel">
+<section>
+<div class="top"><div><h2>控制台</h2><div id="identity" class="hint"></div></div><div class="actions"><button class="secondary" id="refresh">刷新</button><button class="secondary" id="logout">退出登录</button></div></div>
+</section>
+<div class="columns">
+<section>
+<h2>发送密钥</h2><p class="hint">每个用户可创建多把密钥。Server酱格式适合替换现有服务地址；标准格式适合调用 JSON API。密钥只显示一次。</p>
+<ul id="keys"></ul>
+<form id="keyForm">
+<label for="keyName">密钥名称</label><input id="keyName" placeholder="例如：网站监控" required maxlength="80">
+<label for="keyFormat">密钥格式</label><select id="keyFormat"><option value="standard">标准 JSON API</option><option value="serverchan">Server酱 SCT 格式</option></select>
+<p><button type="submit">创建发送密钥</button></p>
+</form>
+<div id="reveal"><strong>请立即保存发送密钥</strong><p class="hint">出于安全考虑，页面刷新后不能再次查看完整密钥。</p><input id="newKey" readonly><p><button class="secondary" id="copyKey" type="button">复制密钥</button></p></div>
+</section>
+<section>
+<h2>发送测试消息</h2>
+<form id="sendForm">
+<label for="sendKey">发送密钥</label><input id="sendKey" type="password" placeholder="mpk_... 或 SCT..." autocomplete="off" required>
+<label for="eventTitle">标题</label><input id="eventTitle" value="MessagePusher 测试消息">
+<label for="eventBody">正文</label><textarea id="eventBody">如果收到这条通知，消息推送已经正常工作。</textarea>
+<label for="eventFiles">附件（最多 5 个，总计 2 MiB）</label><input id="eventFiles" type="file" multiple>
+<p><button type="submit">发送到所有已启用的平台</button></p>
+</form>
+<p class="hint">API 在消息成功加入发送队列后立即返回。每个平台的发送结果可在下方查看。</p>
+</section>
+</div>
+<section>
+<h2>推送平台</h2>
+<ul id="providers"></ul>
+<h3>添加平台</h3>
+<form id="providerForm">
+<div class="row"><div><label for="providerName">自定义名称</label><input id="providerName" placeholder="例如：我的 Telegram" required></div>
+<div><label for="providerKind">平台类型</label><select id="providerKind">
+<option value="telegram">Telegram Bot</option>
+<option value="wecom_app">企业微信自建应用</option>
+<option value="wecom_webhook">企业微信群机器人</option>
+<option value="email_smtp">电子邮件 SMTP</option>
+<option value="email_resend">电子邮件 Resend API</option>
+</select></div></div>
+<label for="providerSettings">平台参数（JSON）</label><textarea id="providerSettings" spellcheck="false" required></textarea>
+<p class="hint" id="providerHint"></p>
+<label for="routeMode">发送方式</label><select id="routeMode"><option value="direct">主程序直接发送</option><option value="proxy">通过无状态消息代理发送</option></select>
+<div id="proxyFields" style="display:none">
+<label for="proxyUrl">代理 HTTPS 地址</label><input id="proxyUrl" placeholder="https://your-relay.vercel.app/">
+<label for="proxySecret">代理共享密钥</label><input id="proxySecret" type="password" autocomplete="new-password" placeholder="与 RELAY_SECRET 一致">
+</div>
+<p><button type="submit">保存推送平台</button></p>
+</form>
+</section>
+<section><div class="top"><h2>最近消息</h2><small>最多显示 50 条</small></div><ul id="events"></ul><pre id="eventDetail" style="display:none"></pre></section>
+<section id="adminSection"><h2>用户管理（管理员）</h2><ul id="users"></ul><h3>创建用户</h3>
+<form id="userForm"><div class="row"><div><label for="userName">用户名</label><input id="userName" required></div><div><label for="userRole">权限</label><select id="userRole"><option value="user">普通用户</option><option value="admin">管理员</option></select></div></div>
+<label for="userPassword">初始密码（至少 12 个字符）</label><input id="userPassword" type="password" minlength="12" required>
+<p><button type="submit">创建用户</button></p></form></section>
+</div>
+</main>
+<script type="module">
+const $ = id => document.getElementById(id);
+let token = sessionStorage.getItem('mp_session') || '';
+let me = null;
+const examples = {
+ telegram: { bot_token: '123456:BOT_TOKEN', bot_username: 'MyNotifyBot', webhook_secret: 'CHANGE_TO_RANDOM_32_CHARACTERS' },
+ wecom_app: { corp_id: 'ww...', corp_secret: 'APP_SECRET', agent_id: 1000002 },
+ wecom_webhook: { webhook_key: 'WEBHOOK_KEY' },
+ email_smtp: { host: 'smtp.example.com', port: 587, tls: 'starttls', username: 'me@example.com', password: 'SMTP_APP_PASSWORD', from: 'me@example.com', to: ['receiver@example.com'] },
+ email_resend: { api_key: 're_...', from: 'notify@example.com', to: ['receiver@example.com'] }
+};
+const hints = {
+ telegram: '首次私聊接收：填入机器人用户名和 webhook_secret，保存后点击平台上的“设置 Webhook”，再点击“获取订阅链接”。如果已知 chat_id，也可直接在 JSON 中添加 chat_id。',
+ wecom_app: '需先在企业微信管理后台创建自建应用并设置网页授权可信域名。保存后使用“获取授权链接”，由企业成员在企业微信中打开。',
+ wecom_webhook: '填写群机器人地址中 key= 后面的值。它会向所在群发送通知。',
+ email_smtp: '由主程序通过 SMTP 直接发送。邮件附件采用 MIME 格式，不能通过 FaaS 代理使用该类型。',
+ email_resend: '通过 Resend 的 HTTPS API 发送。支持主程序直接发送或通过消息代理发送，并可携带附件。'
+};
+const setNotice = (message, error = false) => {
+  const box = $('notice'); box.style.display = 'block';
+  box.textContent = message; box.style.borderColor = error ? '#db9494' : '#b6cce3';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+async function request(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set('Authorization', 'Bearer ' + token);
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const response = await fetch(path, { ...options, headers });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || 'HTTP ' + response.status);
+  return result;
+}
+async function refresh() {
+  if (!token) return showLogin();
+  try {
+    me = await request('/v1/me');
+    $('identity').textContent = me.username + ' · ' + (me.role === 'admin' ? '管理员' : '普通用户');
+    $('loginSection').style.display = 'none';
+    $('mainPanel').style.display = 'block';
+    $('adminSection').style.display = me.role === 'admin' ? 'block' : 'none';
+    await Promise.all([loadKeys(), loadProviders(), loadEvents(), me.role === 'admin' ? loadUsers() : Promise.resolve()]);
+  } catch (error) {
+    if (error.message.includes('Authentication')) { token = ''; sessionStorage.removeItem('mp_session'); showLogin(); }
+    setNotice(error.message, true);
+  }
+}
+function showLogin() { $('loginSection').style.display = 'block'; $('mainPanel').style.display = 'none'; }
+function button(label, handler, danger = false) {
+  const element = document.createElement('button');
+  element.type = 'button'; element.textContent = label; element.className = danger ? 'danger' : 'secondary';
+  element.addEventListener('click', () => Promise.resolve(handler()).catch(error => setNotice(error.message, true)));
+  return element;
+}
+function listItem(parent, title, subtitle, buttons = []) {
+  const item = document.createElement('li');
+  const left = document.createElement('div');
+  const name = document.createElement('div'); name.className = 'name'; name.textContent = title;
+  const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = subtitle;
+  const actions = document.createElement('div'); actions.className = 'actions'; buttons.forEach(b => actions.append(b));
+  left.append(name, meta); item.append(left, actions); parent.append(item);
+}
+async function loadKeys() {
+  const data = await request('/v1/keys'); const parent = $('keys'); parent.replaceChildren();
+  for (const key of data) listItem(parent, key.name, key.prefix + '…',
+    [button('撤销', async () => { if (confirm('确定撤销这把密钥吗？')) { await request('/v1/keys/' + key.id, { method: 'DELETE' }); await loadKeys(); } }, true)]);
+  if (!data.length) listItem(parent, '暂无发送密钥', '先创建一把密钥');
+}
+async function loadProviders() {
+  const data = await request('/v1/providers'); const parent = $('providers'); parent.replaceChildren();
+  for (const p of data) {
+    const buttons = [];
+    if (p.kind === 'telegram') {
+      buttons.push(button('设置 Webhook', async () => { await request('/v1/providers/' + p.id + '/telegram/webhook', { method: 'POST' }); setNotice('Telegram Webhook 设置成功'); }));
+      buttons.push(button('获取订阅链接', async () => { const d = await request('/v1/providers/' + p.id + '/telegram/subscribe', { method: 'POST' }); showLink(d.url); }));
+    }
+    if (p.kind === 'wecom_app') buttons.push(button('获取授权链接', async () => { const d = await request('/v1/providers/' + p.id + '/wecom/subscribe', { method: 'POST' }); showLink(d.url); }));
+    buttons.push(button('删除', async () => { if (confirm('删除平台“' + p.name + '”？')) { await request('/v1/providers/' + p.id, { method: 'DELETE' }); await loadProviders(); } }, true));
+    const status = (p.enabled ? '已启用' : '已禁用') + ' · ' + (p.subscribed ? '可以尝试发送' : '尚未绑定接收者') + ' · ' + p.delivery;
+    listItem(parent, p.name + ' (' + p.kind + ')', status, buttons);
+  }
+  if (!data.length) listItem(parent, '暂无推送平台', '可以同时添加多个邮件、企业微信和 Telegram 平台');
+}
+function showLink(url) {
+  const link = new URL(url);
+  if (!['https://t.me', 'https://open.weixin.qq.com'].includes(link.origin)) throw new Error('Unexpected authorization address');
+  setNotice('授权链接（15 分钟有效）：\n' + url + '\n\n请复制到浏览器，或在对应 App 中打开。');
+}
+async function loadEvents() {
+  const data = await request('/v1/events'); const parent = $('events'); parent.replaceChildren();
+  for (const event of data) {
+    listItem(parent, event.title || '（无标题）',
+      new Date(event.created_at).toLocaleString() + ' · 已发送 ' + event.sent + '/' + event.total + ' · 失败 ' + event.failed,
+      [button('查看详情', async () => {
+        const detail = await request('/v1/events/' + event.id);
+        $('eventDetail').style.display = 'block';
+        $('eventDetail').textContent = JSON.stringify(detail, null, 2);
+      })]);
+  }
+  if (!data.length) listItem(parent, '还没有消息', '完成第一次发送后，消息会显示在这里');
+}
+async function loadUsers() {
+  const data = await request('/v1/users'); const parent = $('users'); parent.replaceChildren();
+  for (const u of data) {
+    const buttons = u.id === me.id ? [] : [button(u.active ? '停用' : '启用', async () => {
+      await request('/v1/users/' + u.id, { method: 'PATCH', body: JSON.stringify({ active: !u.active }) }); await loadUsers();
+    }), button('删除', async () => {
+      if (confirm('确定删除用户及其所有密钥、平台和消息记录吗？')) { await request('/v1/users/' + u.id, { method: 'DELETE' }); await loadUsers(); }
+    }, true)];
+    listItem(parent, u.username, u.role + ' · ' + (u.active ? '正常' : '已停用'), buttons);
+  }
+}
+function chooseTemplate() {
+  const kind = $('providerKind').value;
+  $('providerSettings').value = JSON.stringify(examples[kind], null, 2);
+  $('providerHint').textContent = hints[kind];
+  if (kind === 'email_smtp') { $('routeMode').value = 'direct'; $('routeMode').disabled = true; } else $('routeMode').disabled = false;
+  $('proxyFields').style.display = $('routeMode').value === 'proxy' ? 'block' : 'none';
+}
+$('providerKind').addEventListener('change', chooseTemplate);
+$('routeMode').addEventListener('change', () => { $('proxyFields').style.display = $('routeMode').value === 'proxy' ? 'block' : 'none'; });
+$('loginForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  try { const d = await request('/v1/login', { method: 'POST', body: JSON.stringify({ username: $('username').value, password: $('password').value }) });
+    token = d.token; sessionStorage.setItem('mp_session', token); $('password').value = ''; await refresh();
+  } catch (error) { setNotice(error.message, true); }
+});
+$('logout').addEventListener('click', () => { sessionStorage.removeItem('mp_session'); token = ''; showLogin(); });
+$('refresh').addEventListener('click', refresh);
+$('keyForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    const result = await request('/v1/keys', { method: 'POST', body: JSON.stringify({ name: $('keyName').value, format: $('keyFormat').value }) });
+    $('reveal').style.display = 'block'; $('newKey').value = result.key; $('sendKey').value = result.key;
+    await loadKeys(); setNotice('密钥创建成功，请复制并妥善保存。');
+  } catch (error) { setNotice(error.message, true); }
+});
+$('copyKey').addEventListener('click', () => navigator.clipboard.writeText($('newKey').value).then(() => setNotice('密钥已复制到剪贴板')).catch(e => setNotice(e.message, true)));
+$('providerForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    const delivery = $('routeMode').value === 'direct' ? { mode: 'direct' } :
+      { mode: 'proxy', url: $('proxyUrl').value, secret: $('proxySecret').value };
+    await request('/v1/providers', { method: 'POST', body: JSON.stringify({
+      name: $('providerName').value, kind: $('providerKind').value,
+      settings: JSON.parse($('providerSettings').value), delivery
+    }) });
+    $('providerName').value = ''; await loadProviders(); setNotice('推送平台已保存。');
+  } catch (error) { setNotice(error.message, true); }
+});
+async function encodeFile(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return { filename: file.name, content_type: file.type || 'application/octet-stream', data_base64: btoa(binary) };
+}
+$('sendForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    const files = Array.from($('eventFiles').files);
+    if (files.length > 5 || files.reduce((n, f) => n + f.size, 0) > 2 * 1024 * 1024) throw new Error('最多 5 个附件，总大小不超过 2 MiB');
+    const attachments = await Promise.all(files.map(encodeFile));
+    const result = await request('/v1/send', { method: 'POST', headers: { authorization: 'Bearer ' + $('sendKey').value.trim() },
+      body: JSON.stringify({ title: $('eventTitle').value, body: $('eventBody').value, attachments }) });
+    setNotice('消息已进入队列。编号：' + result.id);
+    await loadEvents();
+  } catch (error) { setNotice(error.message, true); }
+});
+$('userForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    await request('/v1/users', { method: 'POST', body: JSON.stringify({
+      username: $('userName').value, password: $('userPassword').value, role: $('userRole').value
+    }) });
+    $('userPassword').value = ''; $('userName').value = ''; await loadUsers(); setNotice('用户已创建。');
+  } catch (error) { setNotice(error.message, true); }
+});
+chooseTemplate(); if (token) refresh(); else showLogin();
+</script>
+</body></html>

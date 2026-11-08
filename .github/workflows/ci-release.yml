@@ -1,0 +1,174 @@
+name: Test, build and publish
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: messagepusher
+          POSTGRES_PASSWORD: cipassword
+          POSTGRES_DB: messagepusher
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U messagepusher"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://messagepusher:cipassword@localhost:5432/messagepusher
+      CONFIG_KEY_BASE64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      JWT_SECRET: github-actions-test-secret-at-least-32-characters
+      ADMIN_USERNAME: administrator
+      ADMIN_PASSWORD: test-strong-password-123
+      PUBLIC_BASE_URL: https://push.example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test Rust components
+        run: cargo test --all
+      - name: Test FaaS relay
+        run: npm test
+        working-directory: relay
+      - name: Verify API and database migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --quiet > /tmp/messagepusher.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8080/healthz >/dev/null; then break; fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then cat /tmp/messagepusher.log; exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/healthz | python3 -c 'import json,sys; assert json.load(sys.stdin)["ok"]'
+          curl -fsS -X POST http://127.0.0.1:8080/v1/login \
+            -H 'content-type: application/json' \
+            -d '{"username":"administrator","password":"test-strong-password-123"}' > /tmp/login.json
+          SESSION=$(python3 -c 'import json;print(json.load(open("/tmp/login.json"))["token"])')
+          curl -fsS -X POST http://127.0.0.1:8080/v1/providers \
+            -H "Authorization: Bearer $SESSION" -H 'content-type: application/json' \
+            -d '{"name":"CI SMTP provider","kind":"email_smtp","settings":{"host":"127.0.0.1","port":25,"tls":"none","from":"ci@example.com","to":["ci@example.com"]}}' > /tmp/provider.json
+          curl -fsS -X POST http://127.0.0.1:8080/v1/keys \
+            -H "Authorization: Bearer $SESSION" -H 'content-type: application/json' \
+            -d '{"name":"CI Serverchan","format":"serverchan"}' > /tmp/key.json
+          SENDKEY=$(python3 -c 'import json; print(json.load(open("/tmp/key.json"))["key"])')
+          curl -fsS "http://127.0.0.1:8080/${SENDKEY}.send?title=Test&desp=Hello" > /tmp/serverchan.json
+          python3 -c 'import json;assert json.load(open("/tmp/serverchan.json"))["code"] == 0'
+          curl -fsS -X POST "http://127.0.0.1:8080/v1/send" \
+            -H "Authorization: Bearer $SENDKEY" -H 'Content-Type: application/json' \
+            -d '{"title":"File test","body":"Hello","attachments":[{"filename":"example.txt","content_type":"text/plain","data_base64":"aGVsbG8="}]}' > /tmp/sent.json
+          python3 -c 'import json;assert json.load(open("/tmp/sent.json"))["status"] == "queued"'
+          curl -fsS "http://127.0.0.1:8080/v1/events" -H "Authorization: Bearer $SESSION" \
+            | python3 -c 'import json,sys; assert len(json.load(sys.stdin)) == 2'
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            name: linux-x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            name: linux-aarch64
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            name: macos-x86_64
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            name: macos-aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile native executable
+        shell: bash
+        run: cargo build --release --target "${{ matrix.target }}"
+      - name: Package executable and documentation
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          NAME: ${{ matrix.name }}
+        run: |
+          python - <<'PY'
+          import os, pathlib, tarfile, zipfile
+          target = os.environ['TARGET']
+          name = os.environ['NAME']
+          root = pathlib.Path('.')
+          binary = root/'target'/target/'release'/('messagepusher.exe' if 'windows' in name else 'messagepusher')
+          files = [binary, root/'README.md', root/'LICENSE', root/'.env.example']
+          output = root/'dist'
+          output.mkdir(exist_ok=True)
+          if 'windows' in name:
+              with zipfile.ZipFile(output/f'messagepusher-{name}.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+                  for file in files: z.write(file, file.name)
+          else:
+              with tarfile.open(output/f'messagepusher-{name}.tar.gz', 'w:gz') as tar:
+                  for file in files: tar.add(file, arcname=file.name)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: messagepusher-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    if: github.event_name != 'pull_request'
+    needs: [test, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: messagepusher-*
+          merge-multiple: true
+          path: release-assets
+      - name: Update continuous-release tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git tag -f edge "$GITHUB_SHA"
+          git push origin refs/tags/edge --force
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref == 'refs/heads/main' && 'edge' || github.ref_name }}
+          name: ${{ github.ref == 'refs/heads/main' && 'Continuous build (edge)' || github.ref_name }}
+          prerelease: ${{ github.ref == 'refs/heads/main' }}
+          make_latest: ${{ github.ref != 'refs/heads/main' }}
+          generate_release_notes: ${{ github.ref != 'refs/heads/main' }}
+          files: release-assets/*
+          overwrite_files: true
