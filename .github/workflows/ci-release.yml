@@ -225,13 +225,17 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Verify desktop and mobile interface
         run: node web/tests/browser.mjs
+      - name: Verify full application interactions and responsive layouts
+        run: node web/tests/complete-ui.mjs
       - name: Save interface screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: interface-preview
-          path: web/screenshots/*.png
-          if-no-files-found: warn
+          path: |
+            web/screenshots/*.png
+            web/screenshots/complete/*
+          if-no-files-found: error
 
   build:
     needs: test
