@@ -126,11 +126,11 @@ pub async fn wecom_callback(State(state):State<AppState>,Query(request):Query<OA
         .json().await.map_err(ApiError::internal)?;
     if token.get("errcode").and_then(Value::as_i64)!=Some(0){return Err(ApiError::bad("WeCom access token request failed"));}
     let token=token.get("access_token").and_then(Value::as_str).ok_or_else(ApiError::unauthorized)?;
-    let response:Value=state.http.get("https://qyapi.weixin.qq.com/cgi-bin/auth/getuserinfo")
+    let response:Value=state.http.get("https://qyapi.weixin.qq.com/cgi-bin/user/getuserinfo")
         .query(&[("access_token",token),("code",request.code.as_str())])
         .send().await.map_err(ApiError::internal)?.json().await.map_err(ApiError::internal)?;
     if response.get("errcode").and_then(Value::as_i64)!=Some(0){return Err(ApiError::bad("WeCom could not verify the member"));}
-    let member=response.get("userid").and_then(Value::as_str).ok_or_else(||ApiError::bad("WeCom did not return an enterprise member ID"))?;
+    let member=response.get("UserId").and_then(Value::as_str).ok_or_else(||ApiError::bad("WeCom did not return an enterprise member ID"))?;
     provider.settings["to_user"]=json!(member);
     let sealed=state.crypto.encrypt(&serde_json::to_string(&provider)?).map_err(ApiError::internal)?;
     sqlx::query("UPDATE providers SET encrypted_settings=$1 WHERE id=$2").bind(sealed).bind(id).execute(&mut *tx).await?;

@@ -286,7 +286,7 @@ async fn send_resend(state:&AppState,item:&RelayItem)->Result<()>{
     let msg=json!({"from":setting(&item.settings,"from")?,
         "to":email_recipients(&item.settings)?,
         "subject":if item.title.is_empty(){"Notification"}else{&item.title},
-        "text":item.body,
+        "text":if item.body.is_empty(){" "}else{&item.body},
         "attachments":attachments
     });
     let response=state.http.post("https://api.resend.com/emails")

@@ -208,7 +208,8 @@ pub async fn update_provider(State(state):State<AppState>,headers:HeaderMap,Path
 pub async fn delete_provider(State(state):State<AppState>,headers:HeaderMap,Path(id):Path<Uuid>)->ApiResult<Json<Value>>{
     let user=require_user(&state,&headers).await?;
     let mut tx=state.pool.begin().await?;
-    // Keeping delivery history would need a snapshot of provider names. Remove only unused records.
+    sqlx::query("UPDATE deliveries SET status='failed',lease_until=NULL,last_error='The provider was removed' WHERE provider_id=$1 AND status IN ('pending','working')")
+        .bind(id).execute(&mut *tx).await?;
     let rows=sqlx::query("DELETE FROM providers WHERE id=$1 AND user_id=$2")
         .bind(id).bind(user.id).execute(&mut *tx).await?.rows_affected();
     if rows==0{return Err(ApiError::not_found());}
@@ -252,13 +253,13 @@ pub async fn enqueue(state:&AppState,user_id:Uuid,req:SendRequest,idempotency:Op
     req.validate()?;
     if let Some(k)=idempotency {if k.is_empty() || k.len()>128 {return Err(ApiError::bad("idempotency-key must be 1 to 128 bytes"));}}
     let mut tx=state.pool.begin().await?;
-    let rows=sqlx::query("SELECT id FROM providers WHERE user_id=$1 AND enabled=true ORDER BY created_at")
+    let rows=sqlx::query("SELECT id,name FROM providers WHERE user_id=$1 AND enabled=true ORDER BY created_at")
         .bind(user_id).fetch_all(&mut *tx).await?;
-    let mut ids:Vec<Uuid>=rows.into_iter().map(|r|r.get("id")).collect();
+    let mut ids:Vec<(Uuid,String)>=rows.into_iter().map(|r|(r.get("id"),r.get("name"))).collect();
     if let Some(selected)=req.provider_ids {
         if selected.is_empty(){return Err(ApiError::bad("provider_ids may not be empty"));}
-        if selected.iter().any(|id|!ids.contains(id)){return Err(ApiError::bad("provider_ids includes an unavailable provider"));}
-        ids.retain(|id|selected.contains(id));
+        if selected.iter().any(|id|!ids.iter().any(|(pid,_)|pid==id)){return Err(ApiError::bad("provider_ids includes an unavailable provider"));}
+        ids.retain(|(id,_)|selected.contains(id));
     }
     if ids.is_empty() {return Err(ApiError::bad("configure at least one enabled provider before sending"));}
     let id=Uuid::new_v4();
@@ -273,9 +274,9 @@ pub async fn enqueue(state:&AppState,user_id:Uuid,req:SendRequest,idempotency:Op
         tx.commit().await?;
         return Ok(previous);
     }
-    for provider_id in ids {
-        sqlx::query("INSERT INTO deliveries(id,event_id,provider_id) VALUES($1,$2,$3)")
-            .bind(Uuid::new_v4()).bind(id).bind(provider_id).execute(&mut *tx).await?;
+    for (provider_id,provider_name) in ids {
+        sqlx::query("INSERT INTO deliveries(id,event_id,provider_id,provider_name) VALUES($1,$2,$3,$4)")
+            .bind(Uuid::new_v4()).bind(id).bind(provider_id).bind(provider_name).execute(&mut *tx).await?;
     }
     tx.commit().await?;
     Ok(id)
@@ -297,14 +298,14 @@ pub async fn event_detail(State(state):State<AppState>,headers:HeaderMap,Path(id
         .bind(id).bind(user.id).fetch_optional(&state.pool).await?.ok_or_else(ApiError::not_found)?;
     let files:Vec<Attachment>=serde_json::from_value(row.get("attachments")).map_err(ApiError::internal)?;
     let deliveries=sqlx::query(
-        "SELECT d.id,d.status,d.attempts,d.last_error,d.sent_at,p.name FROM deliveries d JOIN providers p ON p.id=d.provider_id WHERE d.event_id=$1 ORDER BY p.name")
+        "SELECT d.id,d.status,d.attempts,d.last_error,d.sent_at,d.provider_name FROM deliveries d WHERE d.event_id=$1 ORDER BY d.provider_name")
         .bind(id).fetch_all(&state.pool).await?;
     Ok(Json(json!({
         "id":id,"title":row.get::<String,_>("title"),"body":row.get::<String,_>("body"),
         "attachments":files.iter().map(|f|json!({"filename":f.filename,"content_type":f.content_type})).collect::<Vec<_>>(),
         "created_at":row.get::<DateTime<Utc>,_>("created_at"),
         "deliveries":deliveries.into_iter().map(|r|json!({
-            "id":r.get::<Uuid,_>("id"),"provider":r.get::<String,_>("name"),"status":r.get::<String,_>("status"),
+            "id":r.get::<Uuid,_>("id"),"provider":r.get::<String,_>("provider_name"),"status":r.get::<String,_>("status"),
             "attempts":r.get::<i32,_>("attempts"),"error":r.get::<Option<String>,_>("last_error"),
             "sent_at":r.get::<Option<DateTime<Utc>>,_>("sent_at")
         })).collect::<Vec<_>>()

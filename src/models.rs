@@ -37,7 +37,7 @@ impl SendRequest {
         for file in &self.attachments {
             if file.filename.trim().is_empty() || file.filename.len() > 120
                 || file.filename.contains('/') || file.filename.contains('\\')
-                || file.filename.contains('\0') || file.filename == "." || file.filename == ".." {
+                || file.filename.chars().any(char::is_control) || file.filename == "." || file.filename == ".." {
                 return Err(ApiError::bad("attachment filename is invalid"));
             }
             if file.content_type.len() > 120 || file.content_type.contains('\n') || file.content_type.contains('\r') {
