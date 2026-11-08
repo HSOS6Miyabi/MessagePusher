@@ -38,6 +38,9 @@ jobs:
       ADMIN_USERNAME: administrator
       ADMIN_PASSWORD: test-strong-password-123
       PUBLIC_BASE_URL: https://push.example.com
+      ALLOW_HTTP_RELAY: '1'
+      WORKER_CONCURRENCY: '32'
+      DATABASE_MAX_CONNECTIONS: '24'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -203,6 +206,9 @@ jobs:
             -d '{"enabled":true}' >/tmp/catalog-enabled.json
           curl -fsS http://127.0.0.1:8080/v1/provider-catalog \
             | python3 -c 'import json,sys;assert "email_smtp" in [x["kind"] for x in json.load(sys.stdin)]'
+          MP_BENCH_ADMIN_USERNAME=administrator \
+          MP_BENCH_ADMIN_PASSWORD=test-strong-password-123 \
+          node scripts/benchmark.mjs --messages=160 --concurrency=32 --providers=4 --relay-delay-ms=35
 
 
 

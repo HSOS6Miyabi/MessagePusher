@@ -31,7 +31,12 @@ async fn main() -> Result<()> {
     let crypto = security::Crypto::new(&env::var("CONFIG_KEY_BASE64").context("CONFIG_KEY_BASE64 is required")?)?;
     let jwt_secret = env::var("JWT_SECRET").context("JWT_SECRET is required")?;
     if jwt_secret.len() < 32 { anyhow::bail!("JWT_SECRET must contain at least 32 characters"); }
-    let pool = PgPoolOptions::new().max_connections(12).connect(&database_url).await?;
+    let max_connections = bounded_setting("DATABASE_MAX_CONNECTIONS", 24, 4, 128)?;
+    let concurrency = bounded_setting("WORKER_CONCURRENCY", 32, 1, 128)?;
+    let pool = PgPoolOptions::new()
+        .max_connections(max_connections as u32)
+        .min_connections(1)
+        .connect(&database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
     bootstrap_admin(&pool).await?;
     let state = AppState {
@@ -42,7 +47,8 @@ async fn main() -> Result<()> {
         http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(22)).build()?,
     };
     let router = create_router(state.clone());
-    tokio::spawn(delivery::worker(state));
+    tracing::info!(concurrency, max_connections, "Starting delivery workers");
+    tokio::spawn(delivery::worker(state, concurrency));
     let bind = env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:8080".into());
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!(%bind,"MessagePusher started");
@@ -88,6 +94,20 @@ fn create_router(state: AppState) -> Router {
         .layer(DefaultBodyLimit::max(3_750_000))
         .with_state(state)
 }
+fn bounded_setting(name: &str, default: usize, minimum: usize, maximum: usize) -> Result<usize> {
+    match env::var(name) {
+        Ok(value) => {
+            let parsed: usize = value.parse()
+                .with_context(|| format!("{name} must be a positive integer"))?;
+            if !(minimum..=maximum).contains(&parsed) {
+                anyhow::bail!("{name} must be between {minimum} and {maximum}");
+            }
+            Ok(parsed)
+        }
+        Err(env::VarError::NotPresent) => Ok(default),
+        Err(error) => Err(error.into()),
+    }
+}
 async fn bootstrap_admin(pool: &PgPool) -> Result<()> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users").fetch_one(pool).await?;
     if count > 0 { return Ok(()); }
@@ -102,6 +122,12 @@ async fn bootstrap_admin(pool: &PgPool) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::bounded_setting;
+    #[test]
+    fn defaults_and_bounds() {
+        assert!((1..=128).contains(&32));
+        assert_eq!(bounded_setting("WORKER_CONCURRENCY_UNSET_TEST", 32, 1, 128).unwrap(), 32);
+    }
     #[test]
     fn router_constructs() {
         let _ = include_str!("../web/index.html");

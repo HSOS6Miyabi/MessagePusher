@@ -27,6 +27,8 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
       RUST_LOG: ${RUST_LOG:-messagepusher=info}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-32}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-24}
     depends_on:
       postgres:
         condition: service_healthy

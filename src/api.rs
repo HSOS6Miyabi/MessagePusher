@@ -302,10 +302,17 @@ pub async fn enqueue(state:&AppState,user_id:Uuid,req:SendRequest,idempotency:Op
         tx.commit().await?;
         return Ok(previous);
     }
-    for (provider_id,provider_name) in ids {
-        sqlx::query("INSERT INTO deliveries(id,event_id,provider_id,provider_name) VALUES($1,$2,$3,$4)")
-            .bind(Uuid::new_v4()).bind(id).bind(provider_id).bind(provider_name).execute(&mut *tx).await?;
-    }
+    let delivery_ids: Vec<Uuid> = (0..ids.len()).map(|_| Uuid::new_v4()).collect();
+    let provider_ids: Vec<Uuid> = ids.iter().map(|(provider_id, _)| *provider_id).collect();
+    let provider_names: Vec<String> = ids.into_iter().map(|(_, name)| name).collect();
+    sqlx::query(
+        "INSERT INTO deliveries (id, event_id, provider_id, provider_name)
+         SELECT new_id, $1, provider_id, provider_name
+         FROM UNNEST($2::uuid[], $3::uuid[], $4::text[])
+         AS targets(new_id, provider_id, provider_name)"
+    )
+        .bind(id).bind(&delivery_ids).bind(&provider_ids).bind(&provider_names)
+        .execute(&mut *tx).await?;
     // PostgreSQL sends NOTIFY only after the transaction commits.
     sqlx::query("NOTIFY messagepusher_delivery").execute(&mut *tx).await?;
     tx.commit().await?;
@@ -314,7 +321,15 @@ pub async fn enqueue(state:&AppState,user_id:Uuid,req:SendRequest,idempotency:Op
 pub async fn list_events(State(state):State<AppState>,headers:HeaderMap)->ApiResult<Json<Vec<Value>>>{
     let user=require_user(&state,&headers).await?;
     let rows=sqlx::query(
-        "SELECT e.id,e.title,e.created_at,COUNT(d.id) total,COUNT(d.id) FILTER(WHERE d.status='sent') sent,COUNT(d.id) FILTER(WHERE d.status='failed') failed FROM events e LEFT JOIN deliveries d ON d.event_id=e.id WHERE e.user_id=$1 GROUP BY e.id ORDER BY e.created_at DESC LIMIT 50")
+        "WITH recent AS MATERIALIZED (
+             SELECT id, title, created_at FROM events WHERE user_id=$1
+             ORDER BY created_at DESC LIMIT 50
+         )
+         SELECT e.id,e.title,e.created_at,COUNT(d.id) total,
+                COUNT(d.id) FILTER(WHERE d.status='sent') sent,
+                COUNT(d.id) FILTER(WHERE d.status='failed') failed
+         FROM recent e LEFT JOIN deliveries d ON d.event_id=e.id
+         GROUP BY e.id,e.title,e.created_at ORDER BY e.created_at DESC")
         .bind(user.id).fetch_all(&state.pool).await?;
     Ok(Json(rows.into_iter().map(|r|json!({
         "id":r.get::<Uuid,_>("id"),"title":r.get::<String,_>("title"),
@@ -324,15 +339,24 @@ pub async fn list_events(State(state):State<AppState>,headers:HeaderMap)->ApiRes
 }
 pub async fn event_detail(State(state):State<AppState>,headers:HeaderMap,Path(id):Path<Uuid>)->ApiResult<Json<Value>>{
     let user=require_user(&state,&headers).await?;
-    let row=sqlx::query("SELECT title,body,attachments,created_at FROM events WHERE id=$1 AND user_id=$2")
+    let row=sqlx::query(
+        "SELECT title,body,created_at,
+           COALESCE((
+             SELECT jsonb_agg(jsonb_build_object(
+                'filename', file->>'filename',
+                'content_type', file->>'content_type'))
+             FROM jsonb_array_elements(attachments) file
+           ), '[]'::jsonb) AS attachment_details
+         FROM events WHERE id=$1 AND user_id=$2"
+    )
         .bind(id).bind(user.id).fetch_optional(&state.pool).await?.ok_or_else(ApiError::not_found)?;
-    let files:Vec<Attachment>=serde_json::from_value(row.get("attachments")).map_err(ApiError::internal)?;
+    let files: Value = row.get("attachment_details");
     let deliveries=sqlx::query(
         "SELECT d.id,d.status,d.attempts,d.last_error,d.sent_at,d.provider_name FROM deliveries d WHERE d.event_id=$1 ORDER BY d.provider_name")
         .bind(id).fetch_all(&state.pool).await?;
     Ok(Json(json!({
         "id":id,"title":row.get::<String,_>("title"),"body":row.get::<String,_>("body"),
-        "attachments":files.iter().map(|f|json!({"filename":f.filename,"content_type":f.content_type})).collect::<Vec<_>>(),
+        "attachments":files,
         "created_at":row.get::<DateTime<Utc>,_>("created_at"),
         "deliveries":deliveries.into_iter().map(|r|json!({
             "id":r.get::<Uuid,_>("id"),"provider":r.get::<String,_>("provider_name"),"status":r.get::<String,_>("status"),
