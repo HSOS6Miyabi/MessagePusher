@@ -210,6 +210,30 @@ jobs:
           MP_BENCH_ADMIN_PASSWORD=test-strong-password-123 \
           node scripts/benchmark.mjs --messages=160 --concurrency=32 --providers=4 --relay-delay-ms=35
 
+      - name: Check real browser interactions with PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.52.0
+          npx playwright install --with-deps chromium
+          cargo run --quiet >/tmp/messagepusher-live-browser.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then cat /tmp/messagepusher-live-browser.log; exit 1; fi
+            sleep 1
+          done
+          node web/tests/live-backend.mjs
+      - name: Save real backend browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interface-postgresql
+          path: web/screenshots/live/*.png
+          if-no-files-found: warn
+
+
 
 
   browser:
