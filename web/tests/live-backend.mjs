@@ -32,6 +32,9 @@ const login = async (page, user, pass) => {
   await page.locator('#appShell').waitFor({ state:'visible' });
 };
 const view = async (page, name) => {
+  if (await page.locator('#mobileMenu').isVisible()) {
+    await page.locator('#mobileMenu').click();
+  }
   await page.locator('.nav-item[data-view=' + name + ']').click();
   await page.locator('#view-' + name).waitFor({ state:'visible' });
 };
