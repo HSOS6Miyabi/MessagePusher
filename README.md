@@ -146,6 +146,21 @@ Vercel Functions 限制每次请求体最大 4.5 MB。本程序为代理设置�
 
 仓库提供 `scripts/benchmark.mjs`，可在独立测试环境中通过本地模拟代理测量消息写入速度、API 请求延迟和实际发送完成速度。具体操作、测试指标及性能调整方法见 [性能与负载测试](docs/performance.md)。
 
+## 维护交接与开发
+
+项目的模块职责、数据库结构、日常运维和开发注意事项已记录在仓库内。交接给新维护人员时，从 [维护交接入口](docs/handover.md) 开始阅读，并按清单检查访问权限、备份和发布流程。
+
+- [维护交接入口](docs/handover.md)：交接清单、阅读顺序和职责分工。
+- [系统结构与数据库](docs/architecture.md)：源代码目录、数据库表和任务处理过程。
+- [开发与测试指南](docs/development.md)：本地环境、命令、浏览器和数据库测试。
+- [运维操作手册](docs/operations.md)：发布检查、备份、恢复和故障处理。
+- [安全与数据处理](docs/security.md)：凭据管理、用户隔离和出站网络。
+- [维护台账](docs/maintenance-ledger.md)：已有模块、运行约束和需要持续跟进的事项。
+- [设计决定](docs/decisions.md)：主要技术选择及其影响。
+- [贡献指南](CONTRIBUTING.md)：提交代码和更新文档的约定。
+
+文档修改后可以执行 `node scripts/check-docs.mjs` 检查内部链接；GitHub Actions 也会运行该检查。发布包会附带这些文档，方便离线交接。
+
 ## 编译与发布
 
 GitHub Actions 在提交到 `main` 时执行 Rust 测试、代理测试及数据库与 API 检查。通过后会构建 Linux x86_64、Linux ARM64、Windows x86_64、macOS Intel 和 macOS Apple Silicon 可执行文件，并上传到滚动更新的 `edge` Release。

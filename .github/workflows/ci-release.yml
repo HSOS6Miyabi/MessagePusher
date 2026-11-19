@@ -48,6 +48,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Validate project documentation
+        run: node scripts/check-docs.mjs
       - name: Test Rust components
         run: cargo test --all
       - name: Test FaaS relay
@@ -309,15 +311,22 @@ jobs:
           name = os.environ['NAME']
           root = pathlib.Path('.')
           binary = root/'target'/target/'release'/('messagepusher.exe' if 'windows' in name else 'messagepusher')
-          files = [binary, root/'README.md', root/'LICENSE', root/'.env.example']
+          files = [
+              binary, root/'README.md', root/'LICENSE', root/'.env.example',
+              root/'CONTRIBUTING.md', *sorted((root/'docs').rglob('*.md')),
+          ]
           output = root/'dist'
           output.mkdir(exist_ok=True)
           if 'windows' in name:
               with zipfile.ZipFile(output/f'messagepusher-{name}.zip', 'w', zipfile.ZIP_DEFLATED) as z:
-                  for file in files: z.write(file, file.name)
+                  for file in files:
+                      name_in_archive = file.name if file == binary else file.relative_to(root).as_posix()
+                      z.write(file, name_in_archive)
           else:
               with tarfile.open(output/f'messagepusher-{name}.tar.gz', 'w:gz') as tar:
-                  for file in files: tar.add(file, arcname=file.name)
+                  for file in files:
+                      name_in_archive = file.name if file == binary else file.relative_to(root).as_posix()
+                      tar.add(file, arcname=name_in_archive)
           PY
       - uses: actions/upload-artifact@v4
         with:
